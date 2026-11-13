@@ -39,7 +39,7 @@ class EqualWeight(Strategy):
 class BuyAndHold(Strategy):
     """Compra a partes iguales el primer día y no vuelve a operar; los pesos derivan.
 
-    Solo da orden en la primera fila, así que se usa con rebalanceo diario (`rebalance=None`).
+    Solo da orden en la primera fila, que el motor ejecuta con cualquier `rebalance`.
     Los activos que aún no cotizan ese día no se compran nunca.
     """
 

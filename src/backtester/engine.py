@@ -47,7 +47,8 @@ def run_backtest(
     """Ejecuta una estrategia sobre una matriz de precios.
 
     rebalance: None = se opera cada día; "W", "ME", ... = solo en el último día de cada periodo.
-    Tampoco se opera en las fechas en que la estrategia no da orden (fila entera de NaN).
+    La primera fila con orden se ejecuta siempre, aunque no caiga en fecha de rebalanceo: es la
+    entrada. No se opera en las fechas en que la estrategia no da orden (fila entera de NaN).
 
     Al operar, la cartera se ajusta a los pesos objetivo. Entre operaciones no se toca: cada
     peso deriva con el rendimiento de su activo y el efectivo (1 - suma de pesos) no rinde.
@@ -59,10 +60,12 @@ def run_backtest(
     growth = (1 + asset_returns).cumprod()
 
     orders = strategy.weights(prices).reindex_like(prices)
-    is_trade = orders.notna().any(axis=1)
+    has_order = orders.notna().any(axis=1)
+    is_trade = has_order
     if rebalance is not None:
         rebal_dates = orders.groupby(pd.Grouper(freq=rebalance)).tail(1).index
-        is_trade &= orders.index.isin(rebal_dates)
+        is_entry = has_order & (has_order.cumsum() == 1)
+        is_trade = has_order & (orders.index.isin(rebal_dates) | is_entry)
     target = orders.fillna(0.0)
 
     # Pesos y nivel de precios de la última operación anterior a cada cierre (shift: sin hoy).

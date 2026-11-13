@@ -89,6 +89,30 @@ def test_buy_and_hold_never_rebalances():
     assert not np.allclose(res.weights.iloc[-1], 0.25)
 
 
+def test_first_order_is_executed_even_off_rebalance_date():
+    """La entrada no espera a fin de mes: buy & hold con rebalanceo mensual no queda en efectivo."""
+    prices = drift_prices()
+    res = run_backtest(prices, BuyAndHold(), costs=ProportionalCosts(0), rebalance="ME")
+    jan31, feb2 = prices.index[1], prices.index[3]
+
+    # orden al cierre del 30-ene (no es fin de mes): 50/50 desde el 31-ene
+    assert tuple(res.weights.loc[jan31]) == pytest.approx((0.5, 0.5))
+    assert res.turnover.loc[jan31] == pytest.approx(1.0)
+    # después no se opera: A dobla el 1-feb y los pesos derivan a (2/3, 1/3)
+    assert tuple(res.weights.loc[feb2]) == pytest.approx((2 / 3, 1 / 3))
+    assert res.turnover.loc[feb2:].sum() == pytest.approx(0.0)
+    assert res.equity.iloc[-1] == pytest.approx(1.6)
+
+
+def test_only_the_first_order_skips_the_rebalance_calendar():
+    """Tras la entrada, las órdenes de fechas que no son de rebalanceo se siguen ignorando."""
+    prices = drift_prices()
+    res = run_backtest(prices, FixedWeights(0.5, 0.5), costs=ProportionalCosts(0), rebalance="ME")
+    # entrada el 31-ene (orden del 30); el 1-feb no se reequilibra aunque haya orden diaria
+    assert res.turnover.loc[prices.index[1]] == pytest.approx(1.0)
+    assert res.turnover.loc[prices.index[2] : prices.index[4]].sum() == pytest.approx(0.0)
+
+
 def test_equal_weight_rebalances_back_to_target():
     prices = synthetic_prices(n_assets=4, n_days=300)
     res = run_backtest(prices, EqualWeight(), rebalance="ME")
@@ -135,12 +159,16 @@ DRIFT_CASES = [
 def test_weights_drift_between_rebalances(w_a, w_b, drifted, ret, turnover):
     prices = drift_prices()
     res = run_backtest(prices, FixedWeights(w_a, w_b), costs=ProportionalCosts(0), rebalance="ME")
-    feb1, feb2, mar1 = prices.index[2], prices.index[3], prices.index[5]
+    jan31, feb1, feb2, mar1 = prices.index[1], prices.index[2], prices.index[3], prices.index[5]
 
-    # 1-feb: primer día con posición, a los pesos objetivo; A dobla
+    # 31-ene: entrada (orden del 30). Los precios no se mueven, así que el rebalanceo de fin
+    # de mes no tiene nada que ajustar
+    assert res.turnover.loc[jan31] == pytest.approx(abs(w_a) + abs(w_b))
+
+    # 1-feb: a los pesos objetivo; A dobla
     assert tuple(res.weights.loc[feb1]) == pytest.approx((w_a, w_b))
     assert res.gross_returns.loc[feb1] == pytest.approx(w_a * 1.0)
-    assert res.turnover.loc[feb1] == pytest.approx(abs(w_a) + abs(w_b))
+    assert res.turnover.loc[feb1] == pytest.approx(0.0)
 
     # 2-feb: no se ha operado; los pesos han derivado y A sube un 10 %
     assert tuple(res.weights.loc[feb2]) == pytest.approx(drifted)
