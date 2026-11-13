@@ -53,21 +53,24 @@ cartera equiponderada de los mismos 9 sectores. Periodo: 2006-02-01 a 2026-10-30
 
 | | Momentum 0 pb | Momentum 5 pb | Momentum 20 pb | Equiponderado |
 |---|---|---|---|---|
-| CAGR | 11,3 % | 11,0 % | 10,1 % | 10,7 % |
-| Volatilidad anual | 18,9 % | 18,9 % | 18,9 % | 18,4 % |
-| Sharpe | 0,66 | 0,65 | 0,61 | 0,65 |
-| Sortino | 0,93 | 0,91 | 0,85 | 0,90 |
-| Max drawdown | −44,4 % | −44,5 % | −44,7 % | −52,5 % |
-| Calmar | 0,25 | 0,25 | 0,23 | 0,20 |
-| Turnover anual | 5,1 | 5,1 | 5,1 | 0,0 |
+| CAGR | 11,2 % | 10,9 % | 10,0 % | 10,5 % |
+| Volatilidad anual | 18,8 % | 18,8 % | 18,8 % | 18,3 % |
+| Sharpe | 0,66 | 0,64 | 0,60 | 0,64 |
+| Sortino | 0,93 | 0,91 | 0,85 | 0,89 |
+| Max drawdown | −44,9 % | −45,0 % | −45,2 % | −53,5 % |
+| Calmar | 0,25 | 0,24 | 0,22 | 0,20 |
+| Turnover anual | 5,2 | 5,2 | 5,2 | 0,3 |
 
 **El momentum sectorial no bate al equiponderado de forma apreciable.** Con 5 pb de costes el
-Sharpe es el mismo (0,65) y con 20 pb queda por debajo. Gana 10 de 21 años, y la ventaja se
-concentra en tres (2008, 2022 y 2026). La caída máxima es 8 puntos menor, pero es un solo
-episodio (2008).
+Sharpe es el mismo (0,64) y con 20 pb queda por debajo. Gana 10 de 21 años, y la ventaja se
+concentra en tres (2008, 2022 y 2026). La caída máxima es 8,5 puntos menor, pero es un solo
+episodio (2008). Un *buy & hold* de los 9 sectores, sin reequilibrar nunca, da lo mismo que el
+equiponderado: 10,5 % de CAGR y Sharpe 0,65.
 
-Dos avisos: el motor aún ignora la deriva de pesos, así que el benchmark equivale a reequilibrar
-cada día sin coste; y falta medir la significación estadística (fase 3).
+El motor modela la deriva de pesos entre rebalanceos: no se opera entre medias y volver al
+objetivo paga costes. Una versión anterior reequilibraba cada día sin coste y daba cifras algo
+mejores en ambas carteras (11,0 % y 10,7 % de CAGR, Sharpe 0,65 en las dos); la conclusión es la
+misma. Falta medir la significación estadística (fase 3).
 
 Análisis completo, revisión de datos e interpretación en
 [notebooks/01_momentum_sectores.ipynb](notebooks/01_momentum_sectores.ipynb).
