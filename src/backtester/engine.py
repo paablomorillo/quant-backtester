@@ -46,24 +46,40 @@ def run_backtest(
 ) -> BacktestResult:
     """Ejecuta una estrategia sobre una matriz de precios.
 
-    rebalance: None = rebalanceo diario; "W", "ME", ... = solo en el último día de cada periodo
-    (entre medias se mantienen los pesos objetivo; la deriva de pesos se ignora en la v0).
+    rebalance: None = se opera cada día; "W", "ME", ... = solo en el último día de cada periodo.
+    Tampoco se opera en las fechas en que la estrategia no da orden (fila entera de NaN).
+
+    Al operar, la cartera se ajusta a los pesos objetivo. Entre operaciones no se toca: cada
+    peso deriva con el rendimiento de su activo y el efectivo (1 - suma de pesos) no rinde.
+    El turnover se mide contra los pesos ya derivados, así que reequilibrar tiene coste aunque
+    el objetivo no cambie. Se anota el primer día en que se mantienen los pesos nuevos.
     """
     costs = costs or ProportionalCosts()
     asset_returns = prices.pct_change(fill_method=None).fillna(0.0)
+    growth = (1 + asset_returns).cumprod()
 
-    target = strategy.weights(prices).reindex_like(prices).fillna(0.0)
+    orders = strategy.weights(prices).reindex_like(prices)
+    is_trade = orders.notna().any(axis=1)
     if rebalance is not None:
-        rebal_dates = target.groupby(pd.Grouper(freq=rebalance)).tail(1).index
-        is_rebal = pd.Series(target.index.isin(rebal_dates), index=target.index)
-        target = target.where(is_rebal, axis=0).ffill().fillna(0.0)
+        rebal_dates = orders.groupby(pd.Grouper(freq=rebalance)).tail(1).index
+        is_trade &= orders.index.isin(rebal_dates)
+    target = orders.fillna(0.0)
+
+    # Pesos y nivel de precios de la última operación anterior a cada cierre (shift: sin hoy).
+    last_weights = target.where(is_trade, axis=0).ffill().shift(1).fillna(0.0)
+    last_growth = growth.where(is_trade, axis=0).ffill().shift(1).fillna(1.0)
+
+    # Pesos al cierre de t antes de operar: posiciones revalorizadas / valor de la cartera.
+    positions = last_weights * growth / last_growth
+    cash = 1 - last_weights.sum(axis=1)
+    before_trade = positions.div(cash + positions.sum(axis=1), axis=0)
+    after_trade = target.where(is_trade, before_trade, axis=0)
 
     # Clave anti look-ahead: la decisión del cierre de t se aplica al rendimiento de t+1.
-    held = target.shift(1).fillna(0.0)
+    held = after_trade.shift(1).fillna(0.0)
 
     gross = (held * asset_returns).sum(axis=1)
-    turnover = held.diff().abs().sum(axis=1)
-    turnover.iloc[0] = held.iloc[0].abs().sum()
+    turnover = (after_trade - before_trade).abs().sum(axis=1).shift(1).fillna(0.0)
     cost = costs(turnover)
 
     return BacktestResult(
