@@ -16,6 +16,13 @@ def test_max_drawdown_known_path():
     assert metrics.max_drawdown(r) == pytest.approx(-0.25)
 
 
+def test_drawdown_counts_a_loss_from_the_starting_capital():
+    # equity: 1.0 -> 0.5 -> 0.5 -> 0.75. El máximo previo es el capital inicial (1,0).
+    r = pd.Series([-0.5, 0.0, 0.5])
+    assert metrics.drawdown(r).tolist() == pytest.approx([-0.5, -0.5, -0.25])
+    assert metrics.max_drawdown(r) == pytest.approx(-0.5)
+
+
 def test_sharpe_scales_with_sqrt_time():
     rng = np.random.default_rng(0)
     r = pd.Series(rng.normal(0.0005, 0.01, 5000))

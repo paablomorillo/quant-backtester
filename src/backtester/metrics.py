@@ -31,8 +31,10 @@ def sortino(returns: pd.Series, risk_free: float = 0.0) -> float:
 
 
 def drawdown(returns: pd.Series) -> pd.Series:
+    """Caída respecto al máximo previo, contando el capital inicial (1) como primer máximo."""
     equity = (1 + returns).cumprod()
-    return equity / equity.cummax() - 1
+    peak = equity.cummax().clip(lower=1.0)
+    return equity / peak - 1
 
 
 def max_drawdown(returns: pd.Series) -> float:
