@@ -47,7 +47,8 @@ O directamente: `python examples/run_momentum.py`
 
 ## Resultados
 Momentum 12-1 sobre 9 ETFs sectoriales del S&P 500 (top 3, rebalanceo mensual) frente a la
-cartera equiponderada de los mismos 9 sectores. Periodo: 2006-02-01 a 2026-10-30.
+cartera equiponderada de los mismos 9 sectores, reequilibrada también cada mes y con 5 pb de
+costes. Periodo: 2006-02-01 a 2026-10-30.
 
 ![Equity y drawdown del momentum sectorial frente al equiponderado](docs/img/momentum_sectores.png)
 
