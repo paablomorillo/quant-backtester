@@ -32,11 +32,50 @@ def load_prices(
     if isinstance(prices, pd.Series):
         prices = prices.to_frame(tickers[0])
     prices = prices.dropna(how="all").sort_index()
+    check_complete(prices, tickers)  # antes de cachear: una descarga rota no debe guardarse
 
     if use_cache:
         CACHE_DIR.mkdir(exist_ok=True)
         prices.to_parquet(path)
     return prices
+
+
+def check_complete(prices: pd.DataFrame, tickers: list[str]) -> None:
+    """Lanza ValueError si falta algún ticker o su columna está vacía.
+
+    yfinance no lanza cuando falla la descarga de un ticker: devuelve la columna a NaN.
+    """
+    missing = [t for t in tickers if t not in prices.columns or prices[t].notna().sum() == 0]
+    if missing:
+        raise ValueError(f"Descarga incompleta, sin datos para: {', '.join(missing)}")
+
+
+def _ticker_quality(series: pd.Series) -> pd.Series:
+    valid = series.dropna()
+    inside = series.loc[valid.index[0] : valid.index[-1]]
+    return pd.Series(
+        {
+            "Primera fecha": valid.index[0],
+            "Última fecha": valid.index[-1],
+            "Observaciones": len(valid),
+            "NaN internos": int(inside.isna().sum()),
+            "Precios no positivos": int((valid <= 0).sum()),
+            "Mayor |rend. diario|": float(valid.pct_change().abs().max()),
+            "Mayor hueco (días)": int(valid.index.to_series().diff().dt.days.max()),
+        }
+    )
+
+
+def quality_report(prices: pd.DataFrame) -> pd.DataFrame:
+    """Revisión de calidad por ticker (una fila por activo).
+
+    "NaN internos" cuenta huecos entre la primera y la última fecha válida de cada activo
+    (empezar tarde no es un hueco). "Mayor hueco" son días naturales entre dos
+    observaciones consecutivas: 3-4 es normal (fines de semana y festivos).
+    """
+    return pd.DataFrame(
+        {ticker: _ticker_quality(prices[ticker]) for ticker in prices.columns}
+    ).T.infer_objects()
 
 
 def synthetic_prices(
