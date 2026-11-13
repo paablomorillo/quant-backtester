@@ -14,7 +14,7 @@ Cada fase termina con: tests en verde, CI en verde, README actualizado y un comm
 - [x] Ejecutar `examples/run_momentum.py` con datos reales de ETFs sectoriales
 - [x] Notebook `01_momentum_sectores.ipynb` con resultados, gráficas e interpretación
 - [x] README con la gráfica de equity y la tabla de métricas
-- [ ] Deriva de pesos entre rebalanceos (ahora se ignora)
+- [x] Deriva de pesos entre rebalanceos
 
 ## Fase 2 — Más estrategias (2-3 semanas)
 - [ ] Mean reversion de corto plazo (z-score sobre media móvil)
