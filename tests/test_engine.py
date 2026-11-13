@@ -63,3 +63,26 @@ def test_monthly_rebalance_changes_weights_only_at_month_end():
     month_ends = prices.groupby(pd.Grouper(freq="ME")).tail(1).index
     next_day = {prices.index[prices.index.get_loc(d) + 1] for d in month_ends[:-1]}
     assert set(change_days) <= next_day
+
+
+def test_first_active_is_first_day_with_position():
+    prices = synthetic_prices(n_assets=5, n_days=400)
+    res = run_backtest(prices, CrossSectionalMomentum(lookback=100, skip=10, top_n=2))
+
+    # la señal existe desde la fila 100 (índice 100) y el motor la aplica un día después
+    assert res.first_active == prices.index[101]
+    assert (res.weights.loc[: prices.index[100]] == 0).all().all()
+
+
+def test_since_trims_every_series_and_restarts_equity():
+    prices = synthetic_prices(n_assets=3, n_days=60)
+    res = run_backtest(prices, BuyAndHold(), costs=ProportionalCosts(5))
+    start = prices.index[20]
+
+    cut = res.since(start)
+
+    for name in ("returns", "gross_returns", "weights", "turnover", "costs"):
+        pd.testing.assert_index_equal(getattr(cut, name).index, prices.index[20:])
+    pd.testing.assert_series_equal(cut.returns, res.returns.loc[start:])
+    assert cut.equity.iloc[0] == pytest.approx(1 + res.returns.loc[start])
+    assert len(res.returns) == 60  # el original no se modifica

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import pandas as pd
 
@@ -22,6 +22,20 @@ class BacktestResult:
     @property
     def equity(self) -> pd.Series:
         return (1 + self.returns).cumprod()
+
+    @property
+    def first_active(self) -> pd.Timestamp:
+        """Primer día con posición abierta (antes, la estrategia está en efectivo)."""
+        invested = self.weights.abs().sum(axis=1) > 0
+        return invested.idxmax()
+
+    def since(self, start) -> BacktestResult:
+        """Copia del resultado recortada a las fechas >= start (la equity vuelve a base 1).
+
+        Sirve para comparar estrategias sobre el mismo periodo, p. ej. sin el calentamiento
+        en el que una de ellas aún no tiene señal.
+        """
+        return BacktestResult(**{f.name: getattr(self, f.name).loc[start:] for f in fields(self)})
 
 
 def run_backtest(
