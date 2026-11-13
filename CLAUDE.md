@@ -30,7 +30,8 @@ Sharpe espectacular por un error metodológico.
 4. **Sin datos de red en tests**: usar `synthetic_prices`.
 5. Los notebooks solo importan y presentan; la lógica vive en `src/`.
 6. No reescribir código correcto ni acortarlo perdiendo claridad; mantener la estructura existente.
-7. Al terminar una tarea: `pytest` y `ruff check .` en verde antes de dar algo por hecho.
+7. Al terminar una tarea: `pytest`, `ruff check .` y `ruff format --check .` en verde antes de
+   dar algo por hecho.
 
 ## Estilo
 - Python 3.11+, type hints, docstrings breves en español
