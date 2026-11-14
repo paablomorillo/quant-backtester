@@ -24,7 +24,7 @@ Each phase ends with: tests green, CI green, README updated and a commit/tag.
 
 ## Phase 3 — Statistical rigor (what sets the project apart)
 - [ ] Walk-forward validation: optimize on a training window, evaluate out of sample
-- [ ] Block bootstrap for Sharpe confidence intervals
+- [x] Block bootstrap for Sharpe confidence intervals (paired stationary bootstrap for Sharpe differences, cross-checked with Ledoit-Wolf, in `significance.py`)
 - [ ] Deflated Sharpe Ratio (López de Prado) to correct for the number of trials
 - [ ] Parameter sensitivity analysis (lookback × top_n heatmap)
 - [ ] More realistic costs: spread + impact proportional to volatility

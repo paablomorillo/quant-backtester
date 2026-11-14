@@ -11,6 +11,7 @@ rigor: no look-ahead bias, transaction costs included, and out-of-sample validat
 - Deducts costs proportional to turnover
 - Computes CAGR, volatility, Sharpe, Sortino, max drawdown, Calmar and turnover
 - Daily, weekly or monthly rebalancing
+- Tests whether the Sharpe difference between two strategies is significant (paired stationary bootstrap and Ledoit-Wolf HAC test)
 
 ## Strategies
 | Strategy | Status |
@@ -71,7 +72,9 @@ same as equal weight: 10.5% CAGR and a Sharpe of 0.65.
 The engine models weight drift between rebalances: nothing is traded in between, and going back
 to the target pays costs. An earlier version rebalanced every day at no cost and gave slightly
 better figures for both portfolios (11.0% and 10.7% CAGR, Sharpe 0.65 for both); the conclusion
-is the same. Statistical significance is still to be measured (phase 3).
+is the same. The Sharpe difference (0.008) is not statistically significant: a paired stationary
+bootstrap gives a 95% interval of about −0.17 to +0.14 (p = 0.92) and the Ledoit-Wolf HAC test
+agrees (p = 0.93).
 
 Full analysis, data checks and interpretation in
 [notebooks/01_sector_momentum.ipynb](notebooks/01_sector_momentum.ipynb).
@@ -93,6 +96,7 @@ src/backtester/
 ├── engine.py        # run_backtest
 ├── costs.py         # cost models
 ├── metrics.py       # performance and risk metrics
+├── significance.py  # paired bootstrap and Ledoit-Wolf tests for Sharpe differences
 └── report.py        # plots and comparisons
 tests/               # pytest, no network
 examples/            # runnable scripts
