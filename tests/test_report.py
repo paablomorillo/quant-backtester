@@ -20,11 +20,11 @@ def _legend_labels(ax):
 def test_plot_result_shows_benchmark_drawdown_with_custom_labels():
     mom, bench = _results()
 
-    fig = plot_result(mom, bench, labels=("Momentum", "Equiponderado"))
+    fig = plot_result(mom, bench, labels=("Momentum", "Equal weight"))
     ax_equity, ax_drawdown = fig.axes
 
-    assert _legend_labels(ax_equity) == ["Momentum", "Equiponderado"]
-    assert _legend_labels(ax_drawdown) == ["Momentum", "Equiponderado"]
+    assert _legend_labels(ax_equity) == ["Momentum", "Equal weight"]
+    assert _legend_labels(ax_drawdown) == ["Momentum", "Equal weight"]
     plt.close(fig)
 
 
@@ -34,7 +34,7 @@ def test_plot_result_without_benchmark_keeps_single_series():
     fig = plot_result(mom)
     ax_equity, ax_drawdown = fig.axes
 
-    assert _legend_labels(ax_equity) == ["Estrategia"]
+    assert _legend_labels(ax_equity) == ["Strategy"]
     assert ax_drawdown.get_legend() is None
     plt.close(fig)
 

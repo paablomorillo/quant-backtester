@@ -7,7 +7,7 @@ from backtester.strategies import CrossSectionalMomentum
 
 
 def test_no_lookahead_in_signal():
-    """Cambiar precios futuros no debe alterar los pesos de fechas pasadas."""
+    """Changing future prices must not alter the weights of past dates."""
     prices = synthetic_prices(n_assets=6, n_days=400)
     strat = CrossSectionalMomentum(lookback=120, skip=10, top_n=2)
     w = strat.weights(prices)

@@ -1,4 +1,4 @@
-"""Momentum de sección cruzada (Jegadeesh & Titman, 1993)."""
+"""Cross-sectional momentum (Jegadeesh & Titman, 1993)."""
 
 from __future__ import annotations
 
@@ -8,17 +8,17 @@ from backtester.strategy import Strategy
 
 
 class CrossSectionalMomentum(Strategy):
-    """Compra los `top_n` activos con mayor rendimiento en la ventana [t-lookback, t-skip].
+    """Buys the `top_n` assets with the highest return over the window [t-lookback, t-skip].
 
-    El `skip` (por defecto ~1 mes) evita el efecto de reversión a corto plazo.
-    long_short=True además vende en corto los `top_n` peores (cartera neutral al mercado).
+    The `skip` (~1 month by default) avoids the short-term reversal effect.
+    long_short=True also shorts the `top_n` worst (a market-neutral portfolio).
     """
 
     name = "momentum"
 
     def __init__(self, lookback: int = 252, skip: int = 21, top_n: int = 3, long_short=False):
         if skip >= lookback:
-            raise ValueError("skip debe ser menor que lookback")
+            raise ValueError("skip must be smaller than lookback")
         self.lookback, self.skip, self.top_n, self.long_short = lookback, skip, top_n, long_short
 
     def signal(self, prices: pd.DataFrame) -> pd.DataFrame:

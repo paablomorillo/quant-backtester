@@ -1,4 +1,4 @@
-"""Gráficas e informe de un backtest."""
+"""Plots and report of a backtest."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ def plot_result(
     result: BacktestResult,
     benchmark: BacktestResult | None = None,
     title: str = "",
-    labels: tuple[str, str] = ("Estrategia", "Benchmark"),
+    labels: tuple[str, str] = ("Strategy", "Benchmark"),
 ):
-    """Equity (arriba) y drawdown (abajo) de la estrategia y, si se pasa, del benchmark."""
+    """Equity (top) and drawdown (bottom) of the strategy and, if given, of the benchmark."""
     fig, (ax1, ax2) = plt.subplots(
         2, 1, figsize=(10, 6), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
     )
@@ -31,7 +31,7 @@ def plot_result(
     if benchmark is not None:
         drawdown(benchmark.returns).plot(ax=ax2, color="tab:orange", lw=1, label=labels[1])
         ax2.legend(loc="lower right")
-        ax2.autoscale(axis="y")  # el área fija el eje a la estrategia; el benchmark puede caer más
+        ax2.autoscale(axis="y")  # the area pins the axis to the strategy; benchmark may fall more
         ax2.set_ylim(top=0)
     ax2.set_xlabel("")
     ax2.set_ylabel("Drawdown")
@@ -40,5 +40,5 @@ def plot_result(
 
 
 def compare(results: dict[str, BacktestResult]) -> pd.DataFrame:
-    """Tabla de métricas con una columna por estrategia."""
+    """Metrics table with one column per strategy."""
     return pd.DataFrame({name: summary(r) for name, r in results.items()})

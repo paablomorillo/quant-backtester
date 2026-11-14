@@ -1,4 +1,4 @@
-"""Métricas de rendimiento y riesgo. Todas asumen rendimientos diarios simples."""
+"""Performance and risk metrics. All assume simple daily returns."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def sortino(returns: pd.Series, risk_free: float = 0.0) -> float:
 
 
 def drawdown(returns: pd.Series) -> pd.Series:
-    """Caída respecto al máximo previo, contando el capital inicial (1) como primer máximo."""
+    """Decline from the previous peak, counting the starting capital (1) as the first peak."""
     equity = (1 + returns).cumprod()
     peak = equity.cummax().clip(lower=1.0)
     return equity / peak - 1
@@ -47,17 +47,17 @@ def calmar(returns: pd.Series) -> float:
 
 
 def summary(result) -> pd.Series:
-    """Tabla resumen de un BacktestResult."""
+    """Summary table of a BacktestResult."""
     r = result.returns
     return pd.Series(
         {
             "CAGR": cagr(r),
-            "Volatilidad anual": annual_volatility(r),
+            "Annual volatility": annual_volatility(r),
             "Sharpe": sharpe(r),
             "Sortino": sortino(r),
             "Max drawdown": max_drawdown(r),
             "Calmar": calmar(r),
-            "Turnover anual": float(result.turnover.mean() * PERIODS_PER_YEAR),
-            "Costes anuales": float(result.costs.mean() * PERIODS_PER_YEAR),
+            "Annual turnover": float(result.turnover.mean() * PERIODS_PER_YEAR),
+            "Annual costs": float(result.costs.mean() * PERIODS_PER_YEAR),
         }
     )

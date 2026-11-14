@@ -1,4 +1,4 @@
-"""Motor de backtesting vectorizado para estrategias cuantitativas."""
+"""Vectorized backtesting engine for quantitative strategies."""
 
 from backtester.costs import ProportionalCosts
 from backtester.engine import BacktestResult, run_backtest

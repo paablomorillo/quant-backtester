@@ -1,7 +1,7 @@
-"""Ejemplo: momentum 12-1 sobre sectores del S&P 500 vs. cartera equiponderada.
+"""Example: 12-1 momentum on S&P 500 sectors vs. an equal-weight portfolio.
 
-Uso:  python examples/run_momentum.py            (datos reales, necesita internet)
-      python examples/run_momentum.py --synthetic (datos simulados)
+Usage: python examples/run_momentum.py             (real data, needs internet)
+       python examples/run_momentum.py --synthetic (simulated data)
 """
 
 import sys
@@ -26,14 +26,14 @@ def main():
     mom = run_backtest(prices, CrossSectionalMomentum(top_n=3), costs=costs, rebalance="ME")
     bench = run_backtest(prices, EqualWeight(), costs=costs, rebalance="ME")
 
-    print(compare({"Momentum 12-1": mom, "Equiponderado": bench}).round(3))
+    print(compare({"Momentum 12-1": mom, "Equal weight": bench}).round(3))
 
     out = Path("reports")
     out.mkdir(exist_ok=True)
-    plot_result(mom, bench, title="Momentum 12-1 sectores vs. equiponderado").savefig(
+    plot_result(mom, bench, title="12-1 sector momentum vs. equal weight").savefig(
         out / "momentum.png", dpi=150
     )
-    print(f"Gráfica guardada en {out / 'momentum.png'}")
+    print(f"Plot saved to {out / 'momentum.png'}")
 
 
 if __name__ == "__main__":

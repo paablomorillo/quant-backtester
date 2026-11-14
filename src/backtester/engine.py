@@ -1,4 +1,4 @@
-"""Motor de backtesting vectorizado."""
+"""Vectorized backtesting engine."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from backtester.strategy import Strategy
 
 @dataclass
 class BacktestResult:
-    returns: pd.Series  # rendimiento neto diario de la cartera
-    gross_returns: pd.Series  # antes de costes
-    weights: pd.DataFrame  # pesos efectivos (ya desfasados) en cada día
-    turnover: pd.Series  # sum |Δw| diario
+    returns: pd.Series  # daily net portfolio return
+    gross_returns: pd.Series  # before costs
+    weights: pd.DataFrame  # effective (already lagged) weights each day
+    turnover: pd.Series  # daily sum |Δw|
     costs: pd.Series
 
     @property
@@ -25,15 +25,15 @@ class BacktestResult:
 
     @property
     def first_active(self) -> pd.Timestamp:
-        """Primer día con posición abierta (antes, la estrategia está en efectivo)."""
+        """First day with an open position (before that, the strategy is in cash)."""
         invested = self.weights.abs().sum(axis=1) > 0
         return invested.idxmax()
 
     def since(self, start) -> BacktestResult:
-        """Copia del resultado recortada a las fechas >= start (la equity vuelve a base 1).
+        """Copy of the result trimmed to dates >= start (equity restarts at base 1).
 
-        Sirve para comparar estrategias sobre el mismo periodo, p. ej. sin el calentamiento
-        en el que una de ellas aún no tiene señal.
+        Used to compare strategies over the same period, e.g. without the warm-up in which
+        one of them has no signal yet.
         """
         return BacktestResult(**{f.name: getattr(self, f.name).loc[start:] for f in fields(self)})
 
@@ -44,23 +44,23 @@ def run_backtest(
     costs: Callable[[pd.Series], pd.Series] | None = None,
     rebalance: str | None = None,
 ) -> BacktestResult:
-    """Ejecuta una estrategia sobre una matriz de precios.
+    """Run a strategy over a price matrix.
 
-    rebalance: None = se opera cada día; "W", "ME", ... = solo en el último día de cada periodo.
-    La primera fila con orden se ejecuta siempre, aunque no caiga en fecha de rebalanceo: es la
-    entrada. No se opera en las fechas en que la estrategia no da orden (fila entera de NaN).
+    rebalance: None = trade every day; "W", "ME", ... = only on the last day of each period.
+    The first row with an order is always executed, even off a rebalance date: it is the
+    entry. No trade happens on dates where the strategy gives no order (an all-NaN row).
 
-    Al operar, la cartera se ajusta a los pesos objetivo. Entre operaciones no se toca: cada
-    peso deriva con el rendimiento de su activo y el efectivo (1 - suma de pesos) no rinde.
-    El turnover se mide contra los pesos ya derivados, así que reequilibrar tiene coste aunque
-    el objetivo no cambie. Se anota el primer día en que se mantienen los pesos nuevos.
+    On a trade, the portfolio is set to the target weights. Between trades it is left alone:
+    each weight drifts with its asset's return and cash (1 - sum of weights) earns nothing.
+    Turnover is measured against the drifted weights, so rebalancing has a cost even when
+    the target does not change. It is booked on the first day the new weights are held.
 
-    Si a un activo le falta un precio, se valora al último conocido y el rendimiento del hueco
-    se cobra cuando vuelve a cotizar. Antes de su primer precio, su rendimiento es 0.
+    If an asset is missing a price, it is valued at the last known one and the return over
+    the gap is earned when it trades again. Before its first price, its return is 0.
     """
     costs = costs or ProportionalCosts()
-    # Un hueco de precio se valora al último precio conocido (ffill solo mira hacia atrás);
-    # el rendimiento acumulado se cobra el día en que vuelve a haber precio.
+    # A price gap is valued at the last known price (ffill only looks backwards);
+    # the accumulated return is earned on the day a price is available again.
     asset_returns = prices.ffill().pct_change(fill_method=None).fillna(0.0)
     growth = (1 + asset_returns).cumprod()
 
@@ -73,17 +73,17 @@ def run_backtest(
         is_trade = has_order & (orders.index.isin(rebal_dates) | is_entry)
     target = orders.fillna(0.0)
 
-    # Pesos y nivel de precios de la última operación anterior a cada cierre (shift: sin hoy).
+    # Weights and price level of the last trade before each close (shift: excluding today).
     last_weights = target.where(is_trade, axis=0).ffill().shift(1).fillna(0.0)
     last_growth = growth.where(is_trade, axis=0).ffill().shift(1).fillna(1.0)
 
-    # Pesos al cierre de t antes de operar: posiciones revalorizadas / valor de la cartera.
+    # Weights at the close of t before trading: revalued positions / portfolio value.
     positions = last_weights * growth / last_growth
     cash = 1 - last_weights.sum(axis=1)
     before_trade = positions.div(cash + positions.sum(axis=1), axis=0)
     after_trade = target.where(is_trade, before_trade, axis=0)
 
-    # Clave anti look-ahead: la decisión del cierre de t se aplica al rendimiento de t+1.
+    # Anti look-ahead key: the decision at the close of t is applied to the return of t+1.
     held = after_trade.shift(1).fillna(0.0)
 
     gross = (held * asset_returns).sum(axis=1)

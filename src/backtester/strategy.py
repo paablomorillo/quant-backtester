@@ -1,4 +1,4 @@
-"""Interfaz común de todas las estrategias."""
+"""Common interface for all strategies."""
 
 from __future__ import annotations
 
@@ -8,16 +8,16 @@ import pandas as pd
 
 
 class Strategy(ABC):
-    """Una estrategia transforma precios en pesos objetivo de cartera.
+    """A strategy turns prices into target portfolio weights.
 
-    Contrato:
-    - `weights(prices)` devuelve un DataFrame con el mismo índice y columnas que `prices`.
-    - La fila t solo puede usar información disponible al cierre de t.
-    - El motor aplica los pesos de t a los rendimientos de t+1 (el desfase lo pone el motor,
-      no la estrategia).
-    - Suma de |pesos| = apalancamiento bruto; lo que falta hasta 1 es efectivo.
-    - Una fila entera de NaN significa "sin orden": el motor no opera y deja derivar los
-      pesos. Un NaN suelto en una fila con otros valores se trata como 0.
+    Contract:
+    - `weights(prices)` returns a DataFrame with the same index and columns as `prices`.
+    - Row t may only use information available at the close of t.
+    - The engine applies the weights of t to the returns of t+1 (the lag is added by the
+      engine, not by the strategy).
+    - Sum of |weights| = gross leverage; whatever is missing up to 1 is cash.
+    - An all-NaN row means "no order": the engine does not trade and lets the weights
+      drift. A single NaN in a row with other values is treated as 0.
     """
 
     name: str = "strategy"
@@ -27,7 +27,7 @@ class Strategy(ABC):
 
 
 class EqualWeight(Strategy):
-    """Equiponderada y siempre invertida: en cada rebalanceo vuelve a 1/n. Sirve de benchmark."""
+    """Equal-weighted and always invested: back to 1/n at each rebalance. Used as a benchmark."""
 
     name = "equal_weight"
 
@@ -37,10 +37,10 @@ class EqualWeight(Strategy):
 
 
 class BuyAndHold(Strategy):
-    """Compra a partes iguales el primer día y no vuelve a operar; los pesos derivan.
+    """Buys equal parts on the first day and never trades again; the weights drift.
 
-    Solo da orden en la primera fila, que el motor ejecuta con cualquier `rebalance`.
-    Los activos que aún no cotizan ese día no se compran nunca.
+    It only gives an order on the first row, which the engine executes with any `rebalance`.
+    Assets that are not trading yet on that day are never bought.
     """
 
     name = "buy_and_hold"

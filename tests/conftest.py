@@ -1,5 +1,5 @@
-"""Configuración común de los tests."""
+"""Shared test configuration."""
 
 import matplotlib
 
-matplotlib.use("Agg")  # backend sin ventana: los tests de gráficas no necesitan pantalla
+matplotlib.use("Agg")  # headless backend: plot tests need no display

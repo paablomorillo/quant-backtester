@@ -1,4 +1,4 @@
-"""Carga de precios (con caché local) y generación de datos sintéticos para tests."""
+"""Price loading (with a local cache) and synthetic data generation for tests."""
 
 from __future__ import annotations
 
@@ -16,23 +16,23 @@ def load_prices(
     end: str | None = None,
     use_cache: bool = True,
 ) -> pd.DataFrame:
-    """Precios de cierre ajustados (filas = fechas, columnas = tickers).
+    """Adjusted close prices (rows = dates, columns = tickers).
 
-    Descarga de Yahoo Finance la primera vez y guarda un parquet en data/.
+    Downloads from Yahoo Finance the first time and saves a parquet file in data/.
     """
     key = f"{'_'.join(sorted(tickers))}_{start}_{end or 'today'}.parquet"
     path = CACHE_DIR / key
     if use_cache and path.exists():
         return pd.read_parquet(path)
 
-    import yfinance as yf  # import perezoso: los tests no necesitan red
+    import yfinance as yf  # lazy import: tests need no network
 
     raw = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False)
     prices = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
     if isinstance(prices, pd.Series):
         prices = prices.to_frame(tickers[0])
     prices = prices.dropna(how="all").sort_index()
-    check_complete(prices, tickers)  # antes de cachear: una descarga rota no debe guardarse
+    check_complete(prices, tickers)  # before caching: a broken download must not be saved
 
     if use_cache:
         CACHE_DIR.mkdir(exist_ok=True)
@@ -41,13 +41,13 @@ def load_prices(
 
 
 def check_complete(prices: pd.DataFrame, tickers: list[str]) -> None:
-    """Lanza ValueError si falta algún ticker o su columna está vacía.
+    """Raise ValueError if a ticker is missing or its column is empty.
 
-    yfinance no lanza cuando falla la descarga de un ticker: devuelve la columna a NaN.
+    yfinance does not raise when one ticker fails to download: it returns an all-NaN column.
     """
     missing = [t for t in tickers if t not in prices.columns or prices[t].notna().sum() == 0]
     if missing:
-        raise ValueError(f"Descarga incompleta, sin datos para: {', '.join(missing)}")
+        raise ValueError(f"Incomplete download, no data for: {', '.join(missing)}")
 
 
 def _ticker_quality(series: pd.Series) -> pd.Series:
@@ -55,23 +55,23 @@ def _ticker_quality(series: pd.Series) -> pd.Series:
     inside = series.loc[valid.index[0] : valid.index[-1]]
     return pd.Series(
         {
-            "Primera fecha": valid.index[0],
-            "Última fecha": valid.index[-1],
-            "Observaciones": len(valid),
-            "NaN internos": int(inside.isna().sum()),
-            "Precios no positivos": int((valid <= 0).sum()),
-            "Mayor |rend. diario|": float(valid.pct_change().abs().max()),
-            "Mayor hueco (días)": int(valid.index.to_series().diff().dt.days.max()),
+            "First date": valid.index[0],
+            "Last date": valid.index[-1],
+            "Observations": len(valid),
+            "Internal NaNs": int(inside.isna().sum()),
+            "Non-positive prices": int((valid <= 0).sum()),
+            "Largest |daily return|": float(valid.pct_change().abs().max()),
+            "Largest gap (days)": int(valid.index.to_series().diff().dt.days.max()),
         }
     )
 
 
 def quality_report(prices: pd.DataFrame) -> pd.DataFrame:
-    """Revisión de calidad por ticker (una fila por activo).
+    """Per-ticker quality check (one row per asset).
 
-    "NaN internos" cuenta huecos entre la primera y la última fecha válida de cada activo
-    (empezar tarde no es un hueco). "Mayor hueco" son días naturales entre dos
-    observaciones consecutivas: 3-4 es normal (fines de semana y festivos).
+    "Internal NaNs" counts gaps between each asset's first and last valid date (a late
+    start is not a gap). "Largest gap" is calendar days between two consecutive
+    observations: 3-4 is normal (weekends and holidays).
     """
     return pd.DataFrame(
         {ticker: _ticker_quality(prices[ticker]) for ticker in prices.columns}
@@ -85,7 +85,7 @@ def synthetic_prices(
     sigma: float = 0.2,
     seed: int = 0,
 ) -> pd.DataFrame:
-    """Precios simulados con movimiento browniano geométrico (252 días/año)."""
+    """Prices simulated with geometric Brownian motion (252 days/year)."""
     rng = np.random.default_rng(seed)
     dt = 1 / 252
     shocks = rng.normal((mu - 0.5 * sigma**2) * dt, sigma * np.sqrt(dt), (n_days, n_assets))

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "backtester"
 version = "0.1.0"
-description = "Motor de backtesting vectorizado para estrategias cuantitativas"
+description = "Vectorized backtesting engine for quantitative strategies"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
