@@ -209,6 +209,24 @@ def test_daily_rebalance_pays_for_undoing_one_day_of_drift():
     assert res.gross_returns.loc[feb2] == pytest.approx(0.05)
 
 
+def test_price_gap_does_not_lose_the_return():
+    """Un NaN suelto se valora al último precio conocido: el 10 % de A llega al volver el precio."""
+    idx = pd.bdate_range("2024-01-01", periods=5)
+    prices = pd.DataFrame({"A": [100.0, np.nan, 110.0, 110.0, 110.0], "B": [100.0] * 5}, index=idx)
+    res = run_backtest(prices, BuyAndHold(), costs=ProportionalCosts(0))
+    # 50/50 al cierre del día 0; A sube un 10 % entre el día 0 y el 2
+    assert res.gross_returns.tolist() == pytest.approx([0.0, 0.0, 0.05, 0.0, 0.0])
+    assert res.equity.iloc[-1] == pytest.approx(1.05)
+
+
+def test_asset_without_history_has_no_return_on_its_first_price():
+    """Antes del primer precio no hay rendimiento que cobrar, aunque el activo tenga peso."""
+    idx = pd.bdate_range("2024-01-01", periods=4)
+    prices = pd.DataFrame({"A": [np.nan, np.nan, 100.0, 110.0], "B": [100.0] * 4}, index=idx)
+    res = run_backtest(prices, FixedWeights(0.5, 0.5), costs=ProportionalCosts(0))
+    assert res.gross_returns.tolist() == pytest.approx([0.0, 0.0, 0.0, 0.05])
+
+
 def test_engine_drift_has_no_lookahead():
     """Cambiar precios futuros no altera pesos, turnover ni rendimientos pasados."""
     prices = synthetic_prices(n_assets=5, n_days=300)

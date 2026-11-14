@@ -54,9 +54,14 @@ def run_backtest(
     peso deriva con el rendimiento de su activo y el efectivo (1 - suma de pesos) no rinde.
     El turnover se mide contra los pesos ya derivados, así que reequilibrar tiene coste aunque
     el objetivo no cambie. Se anota el primer día en que se mantienen los pesos nuevos.
+
+    Si a un activo le falta un precio, se valora al último conocido y el rendimiento del hueco
+    se cobra cuando vuelve a cotizar. Antes de su primer precio, su rendimiento es 0.
     """
     costs = costs or ProportionalCosts()
-    asset_returns = prices.pct_change(fill_method=None).fillna(0.0)
+    # Un hueco de precio se valora al último precio conocido (ffill solo mira hacia atrás);
+    # el rendimiento acumulado se cobra el día en que vuelve a haber precio.
+    asset_returns = prices.ffill().pct_change(fill_method=None).fillna(0.0)
     growth = (1 + asset_returns).cumprod()
 
     orders = strategy.weights(prices).reindex_like(prices)
