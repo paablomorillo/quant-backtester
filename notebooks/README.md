@@ -1,6 +1,6 @@
 # Notebooks
 
-Aquí van los análisis y demos (01_momentum_sectores.ipynb, 02_mean_reversion.ipynb, ...).
+Analyses and demos live here (01_sector_momentum.ipynb, 02_mean_reversion.ipynb, ...).
 
-Regla: los notebooks solo importan de `backtester` y presentan resultados. La lógica nueva va
-en `src/` con su test, nunca definida dentro del notebook.
+Rule: notebooks only import from `backtester` and present results. New logic goes in `src/`
+with its test, never defined inside the notebook.

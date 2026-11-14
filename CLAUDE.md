@@ -1,39 +1,44 @@
 # CLAUDE.md
 
-Proyecto personal de portfolio: motor de backtesting vectorizado en Python para estrategias
-cuantitativas. Autor: Pablo (Ingeniería Matemática en Ciencia de Datos, UPF).
-El objetivo es aprender y enseñar rigor: es preferible un resultado honesto y modesto a un
-Sharpe espectacular por un error metodológico.
+Personal portfolio project: a vectorized backtesting engine in Python for quantitative
+strategies. Author: Pablo (Mathematical Engineering in Data Science, UPF).
+The goal is to learn and to show rigor: an honest, modest result is better than a spectacular
+Sharpe caused by a methodological error.
 
-## Comandos
-- Instalar: `pip install -e ".[dev]"`
+## Language
+- Everything written to the repo is in **English**: code, comments, docstrings, error messages,
+  labels, docs, notebook text and commit messages.
+- Pablo may talk to you in Spanish. Reply in the language he uses, but keep the repo in English.
+
+## Commands
+- Install: `pip install -e ".[dev]"`
 - Tests: `pytest`
-- Lint y formato: `ruff check . --fix && ruff format .`
-- Ejemplo: `python examples/run_momentum.py` (o `--synthetic` sin internet)
+- Lint and format: `ruff check . --fix && ruff format .`
+- Example: `python examples/run_momentum.py` (or `--synthetic` without internet)
 
-## Arquitectura
-- `src/backtester/data.py`: descarga (yfinance, caché parquet en `data/`) y datos sintéticos
-- `src/backtester/strategy.py`: clase base `Strategy`; `weights(prices) -> DataFrame` de pesos
-- `src/backtester/strategies/`: una estrategia por fichero
-- `src/backtester/engine.py`: `run_backtest` aplica pesos, costes y rebalanceo
-- `src/backtester/metrics.py`: métricas sobre rendimientos diarios simples (252 días/año)
-- `src/backtester/report.py`: gráficas y tablas comparativas
-- `docs/ROADMAP.md`: fases del proyecto; marcar casillas al terminar cada punto
+## Architecture
+- `src/backtester/data.py`: download (yfinance, parquet cache in `data/`) and synthetic data
+- `src/backtester/strategy.py`: `Strategy` base class; `weights(prices) -> DataFrame` of weights
+- `src/backtester/strategies/`: one strategy per file
+- `src/backtester/engine.py`: `run_backtest` applies weights, costs and rebalancing
+- `src/backtester/metrics.py`: metrics on simple daily returns (252 days/year)
+- `src/backtester/report.py`: plots and comparison tables
+- `docs/ROADMAP.md`: project phases; tick the boxes as each item is finished
 
-## Reglas no negociables
-1. **Sin look-ahead.** Una estrategia en la fila t solo usa datos hasta el cierre de t. El
-   desfase a t+1 lo hace el motor; las estrategias NUNCA hacen `shift(-k)`.
-2. **Cada estrategia nueva lleva un test de "cambiar el futuro no altera el pasado"**
-   (ver `tests/test_momentum.py::test_no_lookahead_in_signal`).
-3. **Test antes que código** para lógica nueva del motor o de métricas, con casos calculables
-   a mano.
-4. **Sin datos de red en tests**: usar `synthetic_prices`.
-5. Los notebooks solo importan y presentan; la lógica vive en `src/`.
-6. No reescribir código correcto ni acortarlo perdiendo claridad; mantener la estructura existente.
-7. Al terminar una tarea: `pytest`, `ruff check .` y `ruff format --check .` en verde antes de
-   dar algo por hecho.
+## Non-negotiable rules
+1. **No look-ahead.** A strategy at row t only uses data up to the close of t. The lag to t+1
+   is done by the engine; strategies NEVER call `shift(-k)`.
+2. **Every new strategy gets a "changing the future does not alter the past" test**
+   (see `tests/test_momentum.py::test_no_lookahead_in_signal`).
+3. **Test before code** for new engine or metrics logic, with cases that can be worked out by
+   hand.
+4. **No network data in tests**: use `synthetic_prices`.
+5. Notebooks only import and present; the logic lives in `src/`.
+6. Do not rewrite correct code or shorten it at the expense of clarity; keep the existing structure.
+7. When finishing a task: `pytest`, `ruff check .` and `ruff format --check .` green before
+   calling anything done.
 
-## Estilo
-- Python 3.11+, type hints, docstrings breves en español
-- pandas vectorizado; nada de bucles por fecha salvo que sea imprescindible
-- Commits pequeños en español, en imperativo: "Añade estrategia de pairs trading"
+## Style
+- Python 3.11+, type hints, short docstrings in English
+- Vectorized pandas; no per-date loops unless unavoidable
+- Small commits in English, imperative mood: "Add pairs trading strategy"
