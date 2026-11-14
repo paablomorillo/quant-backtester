@@ -227,6 +227,44 @@ def test_asset_without_history_has_no_return_on_its_first_price():
     assert res.gross_returns.tolist() == pytest.approx([0.0, 0.0, 0.0, 0.05])
 
 
+def test_trailing_nans_warn_with_ticker_and_last_date():
+    """An asset that stops trading before the end is flagged by name and last price date."""
+    idx = pd.bdate_range("2024-01-01", periods=5)
+    prices = pd.DataFrame({"A": [100.0, 101.0, 102.0, np.nan, np.nan], "B": [100.0] * 5}, index=idx)
+    with pytest.warns(UserWarning, match=r"A.*2024-01-03") as record:
+        run_backtest(prices, BuyAndHold(), costs=ProportionalCosts(0))
+    assert len(record) == 1
+    assert "B" not in str(record[0].message)
+
+
+def test_trailing_nans_warning_names_every_affected_ticker():
+    idx = pd.bdate_range("2024-01-01", periods=4)
+    prices = pd.DataFrame(
+        {
+            "A": [100.0, np.nan, np.nan, np.nan],
+            "B": [100.0, 100.0, np.nan, np.nan],
+            "C": [100.0] * 4,
+        },
+        index=idx,
+    )
+    with pytest.warns(UserWarning) as record:
+        run_backtest(prices, BuyAndHold(), costs=ProportionalCosts(0))
+    message = str(record[0].message)
+    assert "A" in message and "2024-01-01" in message
+    assert "B" in message and "2024-01-02" in message
+    assert "C" not in message
+
+
+def test_interior_gaps_and_leading_nans_do_not_warn(recwarn):
+    idx = pd.bdate_range("2024-01-01", periods=5)
+    prices = pd.DataFrame(
+        {"A": [100.0, np.nan, 110.0, 110.0, 110.0], "B": [np.nan, np.nan, 100.0, 100.0, 100.0]},
+        index=idx,
+    )
+    run_backtest(prices, BuyAndHold(), costs=ProportionalCosts(0))
+    assert not [w for w in recwarn if issubclass(w.category, UserWarning)]
+
+
 def test_engine_drift_has_no_lookahead():
     """Changing future prices does not alter past weights, turnover or returns."""
     prices = synthetic_prices(n_assets=5, n_days=300)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, fields
 
@@ -38,6 +39,25 @@ class BacktestResult:
         return BacktestResult(**{f.name: getattr(self, f.name).loc[start:] for f in fields(self)})
 
 
+def _warn_on_trailing_nans(prices: pd.DataFrame) -> None:
+    """Warn about assets whose last price is before the end of the sample.
+
+    Such an asset keeps its last known price until the end (see run_backtest), which hides
+    a delisting or a data problem. An asset with no price at all is not reported here.
+    """
+    last_valid = prices.apply(pd.Series.last_valid_index)
+    stopped = last_valid[last_valid.notna() & (last_valid != prices.index[-1])]
+    if stopped.empty:
+        return
+    detail = ", ".join(f"{ticker} (last price {date:%Y-%m-%d})" for ticker, date in stopped.items())
+    warnings.warn(
+        f"Assets with no price at the end of the sample ({prices.index[-1]:%Y-%m-%d}): {detail}. "
+        "They are held at their last known price.",
+        UserWarning,
+        stacklevel=3,
+    )
+
+
 def run_backtest(
     prices: pd.DataFrame,
     strategy: Strategy,
@@ -57,7 +77,9 @@ def run_backtest(
 
     If an asset is missing a price, it is valued at the last known one and the return over
     the gap is earned when it trades again. Before its first price, its return is 0.
+    An asset whose prices stop before the end of the sample triggers a UserWarning.
     """
+    _warn_on_trailing_nans(prices)
     costs = costs or ProportionalCosts()
     # A price gap is valued at the last known price (ffill only looks backwards);
     # the accumulated return is earned on the day a price is available again.
