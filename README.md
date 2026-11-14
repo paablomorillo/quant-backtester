@@ -64,8 +64,8 @@ Period: 2006-02-01 to 2026-10-30.
 
 **Sector momentum does not beat equal weight by any meaningful margin.** With 5 bps of costs the
 Sharpe is the same (0.64) and with 20 bps it falls behind. It wins 10 of 21 years, and the edge
-is concentrated in three of them (2008, 2022 and 2026). The max drawdown is 8.5 points smaller,
-but that is a single episode (2008). A *buy & hold* of the 9 sectors, never rebalanced, does the
+is concentrated in four of them (2026, 2022, 2008 and 2020); the other 17, taken together,
+subtract. The max drawdown is 8.5 points smaller, but that is a single episode (2008). A *buy & hold* of the 9 sectors, never rebalanced, does the
 same as equal weight: 10.5% CAGR and a Sharpe of 0.65.
 
 The engine models weight drift between rebalances: nothing is traded in between, and going back
