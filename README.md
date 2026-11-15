@@ -11,7 +11,7 @@ rigor: no look-ahead bias, transaction costs included, and out-of-sample validat
 - Deducts costs proportional to turnover
 - Computes CAGR, volatility, Sharpe, Sortino, max drawdown, Calmar and turnover
 - Daily, weekly or monthly rebalancing
-- Tests whether the Sharpe difference between two strategies is significant (paired stationary bootstrap and Ledoit-Wolf HAC test), with the Holm correction when several strategies are compared
+- Tests whether the Sharpe difference between two strategies is significant (paired stationary bootstrap and Ledoit-Wolf HAC test), with the Holm correction when several strategies are compared, and whether a single Sharpe ratio differs from zero (one-sample stationary bootstrap)
 
 ## Strategies
 | Strategy | Status |
@@ -19,7 +19,7 @@ rigor: no look-ahead bias, transaction costs included, and out-of-sample validat
 | 12-1 cross-sectional momentum (long-only / long-short) | ✅ |
 | Short-term mean reversion, price z-score (long-only / long-short) | ✅ |
 | Time-series trend following (price above its moving average, else cash) | ✅ |
-| Pairs trading (cointegration) | ⏳ |
+| Pairs trading (rolling Engle-Granger cointegration test, spread z-score) | ✅ |
 
 ## Installation
 ```bash
@@ -110,6 +110,40 @@ the earlier choices of universe and parameters.
 Full analysis in
 [notebooks/02_strategies_comparison.ipynb](notebooks/02_strategies_comparison.ipynb).
 
+### Pairs trading on four pre-selected pairs
+KO/PEP, XOM/CVX, GLD/GDX and EWA/EWC, chosen for their economic link before looking at any
+result. Every 21 sessions the hedge ratio and an Engle-Granger cointegration test are
+re-estimated on the last 252 closes; a pair is traded only while it passes the test. Entry at
+|z| > 2, exit at |z| < 0.5, stop at |z| > 4, at most 63 sessions per trade, 5 bps of costs.
+Parameters fixed in advance, one run. Period: 2007-05-22 to 2026-10-30.
+
+![Equity of each pair and of the four together, and when each pair was tradable](docs/img/pairs_trading.png)
+
+| | KO/PEP | XOM/CVX | GLD/GDX | EWA/EWC | All pairs |
+|---|---|---|---|---|---|
+| Share of days tradable | 7.3% | 7.7% | 11.2% | 9.0% | |
+| Share of days in a trade | 2.9% | 1.8% | 3.1% | 1.9% | 9.6% |
+| Trades | 7 | 8 | 11 | 7 | 33 |
+| Sharpe before costs | 0.22 | 0.26 | −0.17 | −0.04 | 0.08 |
+| Sharpe after costs | 0.19 | 0.21 | −0.21 | −0.08 | 0.00 |
+| Max drawdown | −2.8% | −3.0% | −9.7% | −4.5% | −10.0% |
+| Bootstrap p-value vs. zero (raw / Holm) | 0.17 / 0.83 | 0.39 / 1.00 | 0.39 / 1.00 | 0.68 / 1.00 | 1.00 / 1.00 |
+
+**The strategy earns nothing, mostly because it barely trades.** Each pair passes the
+cointegration test on a one-year window 7% to 11% of the time, close to the 5% that two
+unrelated random walks pass by chance, and the portfolio is in cash more than 90% of the days.
+Of the 33 trades, 18 are closed because the pair stops passing the test and only 11 reach their
+target. The Sharpe of the four pairs together is 0.00 after costs (95% interval about −0.43 to
++0.46) and no single pair is distinguishable from zero.
+
+The benchmark is cash, not equal weight: the strategy is long one leg and short the other, so
+the question is whether its Sharpe ratio differs from zero. This is not evidence that the pairs
+are not cointegrated, because the test has low power on 252 observations. It says that this
+filter, with this window, cannot tell them from unrelated pairs most of the time. The pairs are
+textbook examples, which favours the strategy, and borrowing costs are not modelled.
+
+Full analysis in [notebooks/03_pairs_trading.ipynb](notebooks/03_pairs_trading.ipynb).
+
 ## Tests
 ```bash
 pytest
@@ -127,7 +161,7 @@ src/backtester/
 ├── engine.py        # run_backtest
 ├── costs.py         # cost models
 ├── metrics.py       # performance and risk metrics
-├── significance.py  # paired bootstrap and Ledoit-Wolf tests for Sharpe differences, Holm correction
+├── significance.py  # bootstrap and Ledoit-Wolf tests for Sharpe ratios and differences, Holm correction
 └── report.py        # plots and comparisons
 tests/               # pytest, no network
 examples/            # runnable scripts

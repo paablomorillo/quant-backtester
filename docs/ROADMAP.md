@@ -18,14 +18,15 @@ Each phase ends with: tests green, CI green, README updated and a commit/tag.
 
 ## Phase 2 — More strategies (2-3 weeks)
 - [x] Short-term mean reversion (z-score over a moving average)
-- [ ] Pairs trading: cointegration test (Engle-Granger), spread and entry/exit z-score
+- [x] Pairs trading: cointegration test (Engle-Granger), spread and entry/exit z-score
+- [x] Notebook `03_pairs_trading.ipynb`: four pre-selected pairs, how often each is tradable, and a one-sample Sharpe test against cash
 - [x] Time-series trend following (a signal per asset, not cross-sectional)
 - [x] Notebook `02_strategies_comparison.ipynb`: momentum, mean reversion and trend following vs. equal weight, with Holm-corrected Sharpe difference tests
 - [ ] Volatility targeting as a layer on top of any strategy
 
 ## Phase 3 — Statistical rigor (what sets the project apart)
 - [ ] Walk-forward validation: optimize on a training window, evaluate out of sample
-- [x] Block bootstrap for Sharpe confidence intervals (paired stationary bootstrap for Sharpe differences, cross-checked with Ledoit-Wolf, in `significance.py`)
+- [x] Block bootstrap for Sharpe confidence intervals (paired stationary bootstrap for Sharpe differences, cross-checked with Ledoit-Wolf, and a one-sample version against zero, in `significance.py`)
 - [ ] Deflated Sharpe Ratio (López de Prado) to correct for the number of trials
 - [ ] Parameter sensitivity analysis (lookback × top_n heatmap)
 - [ ] More realistic costs: spread + impact proportional to volatility
