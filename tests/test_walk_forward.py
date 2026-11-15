@@ -211,6 +211,59 @@ def test_switching_between_candidates_pays_turnover_once_through_the_engine():
     assert out_of_sample.sum() == pytest.approx(spliced.sum() - 3.0 * 10 / 10_000)
 
 
+def test_the_switch_is_traded_at_the_year_end_with_monthly_rebalancing():
+    """The configuration of the notebooks: orders every day, trades only at month ends."""
+    prices = regime_prices()
+    candidates = {"early": Tilt(1.0), "late": Tilt(0.0)}
+    walk = WalkForward(candidates, rebalance="ME", min_days=250, rolling_days=250)
+
+    chosen = walk.selection(prices)
+    weights = walk.weights(prices)
+    result = run_backtest(prices, walk, rebalance="ME")
+
+    switch_day = chosen.index[2]
+    booked = prices.index[prices.index.get_loc(switch_day) + 1]
+    # The boundary is exact: "early" up to the day before the switch, "late" from that day on.
+    before = (weights.index >= chosen.index[0]) & (weights.index < switch_day)
+    assert (weights.loc[before, "early"] == 1.0).all()
+    assert (weights.loc[switch_day:, "late"] == 1.0).all()
+    assert result.turnover[booked] == pytest.approx(2.0)
+    assert result.weights.loc[booked, "late"] == pytest.approx(1.0)
+
+
+class SilentAtYearEnd(Tilt):
+    """A `Tilt` that gives no order (an all-NaN row) on the last session of each year."""
+
+    def weights(self, prices: pd.DataFrame) -> pd.DataFrame:
+        years = prices.index.year
+        last_of_year = np.append(years[1:] != years[:-1], True)
+        orders = super().weights(prices)
+        orders.loc[last_of_year] = np.nan
+        return orders
+
+
+def test_a_selected_candidate_without_an_order_closes_the_previous_one():
+    """No order on the selection day must not leave the previous candidate held."""
+    prices = regime_prices()
+    candidates = {"early": Tilt(1.0), "late": SilentAtYearEnd(0.0)}
+    walk = WalkForward(candidates, min_days=250, rolling_days=250)
+
+    chosen = walk.selection(prices)
+    result = run_backtest(prices, walk)
+
+    switch_day = chosen.index[2]
+    assert chosen["selected"].iloc[2] == "late"
+    booked = prices.index[prices.index.get_loc(switch_day) + 1]
+    assert (result.weights.loc[booked] == 0.0).all()  # in cash for one day, not still in "early"
+    assert result.weights.iloc[prices.index.get_loc(booked) + 1]["late"] == pytest.approx(1.0)
+
+
+def test_splicing_an_empty_selection_is_rejected():
+    returns = two_candidate_returns()
+    with pytest.raises(ValueError):
+        splice_returns(returns, select_by_year(returns, min_days=5000)["selected"])
+
+
 def test_no_lookahead_in_selection_or_weights():
     """Changing prices after a selection day alters neither earlier selections nor weights."""
     prices = synthetic_prices(n_assets=5, n_days=1500)  # 2020-01 to 2025-09

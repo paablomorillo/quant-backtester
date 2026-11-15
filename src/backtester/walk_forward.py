@@ -70,6 +70,8 @@ def splice_returns(returns: pd.DataFrame, selected: pd.Series) -> pd.Series:
     so the trade from one candidate to the next is never paid. It is a reference to measure
     what that trade costs when the weights go through the engine (see `WalkForward`).
     """
+    if selected.empty:
+        raise ValueError("there is no selection to splice")
     pieces = []
     ends = [*selected.index[1:], returns.index[-1]]
     for day, label, end in zip(selected.index, selected, ends, strict=True):
@@ -99,8 +101,9 @@ class WalkForward(Strategy):
 
     The weights are those of the selected candidate from its selection day on, so the choice
     made at the last close of a year earns the returns of the next year. Before the first
-    selection the portfolio is in cash. A candidate that gives no order on its selection day
-    (an all-NaN row) is entered on its next order.
+    selection the portfolio is in cash. If a candidate gives no order on its selection day (an
+    all-NaN row), the previous candidate is closed that day and the new one is entered on its
+    next order; the portfolio is in cash in between.
 
     Run the result through `run_backtest` with the same `costs` and `rebalance`: moving from
     one candidate to the next is then a trade like any other and pays its turnover. Splicing
@@ -157,4 +160,7 @@ class WalkForward(Strategy):
             # From the selection day up to, but not including, the next one.
             held = (prices.index >= day) & (prices.index < end if end is not None else True)
             target.loc[held] = orders[label].reindex_like(prices).loc[held]
+            if target.loc[day].isna().all():
+                # "No order" would leave the previous candidate held: close it instead.
+                target.loc[day] = 0.0
         return target
