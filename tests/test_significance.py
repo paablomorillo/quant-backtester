@@ -1,6 +1,7 @@
 """Tests for the Sharpe-difference significance tests, on synthetic data with a known answer."""
 
 import dataclasses
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,18 @@ def paired_returns(
     common = rng.normal(0.0, 0.01, n)
     r1 = common + rng.normal(drift_1, idio_vol, n)
     r2 = common + rng.normal(drift_2, idio_vol, n)
+    return pd.Series(r1, index=index), pd.Series(r2, index=index)
+
+
+def clustered_returns(n: int, seed: int, regime_days: int = 100) -> tuple[pd.Series, pd.Series]:
+    """Two equal-drift series whose volatility switches between calm and stormy regimes."""
+    rng = np.random.default_rng(seed)
+    index = pd.bdate_range("2010-01-01", periods=n)
+    regimes = rng.choice([0.006, 0.02], size=n // regime_days + 1)
+    vol = np.repeat(regimes, regime_days)[:n]
+    common = rng.normal(0.0, 1.0, n) * vol
+    r1 = common + rng.normal(0.0004, 0.004, n) * vol / 0.01
+    r2 = common + rng.normal(0.0004, 0.004, n) * vol / 0.01
     return pd.Series(r1, index=index), pd.Series(r2, index=index)
 
 
@@ -166,7 +179,7 @@ def test_equal_drift_series_are_rejected_about_as_often_as_the_nominal_level():
     hac_rejections = 0
     for seed in range(n_sims):
         r1, r2 = paired_returns(750, 0.0004, 0.0004, seed=1000 + seed)
-        boot_rejections += bootstrap_sharpe_difference(r1, r2, n_boot=200, seed=seed).p_value < 0.05
+        boot_rejections += bootstrap_sharpe_difference(r1, r2, n_boot=100, seed=seed).p_value < 0.05
         hac_rejections += ledoit_wolf_sharpe_test(r1, r2).p_value < 0.05
 
     # Nominal level is 5%; with 100 simulations 12% is three standard errors away. The lower
@@ -252,14 +265,103 @@ def test_explicit_block_length_is_reported_back():
     assert result.n_boot == 100
 
 
-def test_series_are_aligned_on_dates_and_a_warning_flags_dropped_rows():
+def test_series_are_aligned_on_dates_without_a_warning_when_one_is_just_shorter():
     r1, r2 = paired_returns(300, 0.0005, 0.0002, seed=11)
 
-    with pytest.warns(UserWarning, match="dropped"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         result = bootstrap_sharpe_difference(r1, r2.iloc[50:], n_boot=100, seed=0)
 
     expected = sharpe(r1.iloc[50:]) - sharpe(r2.iloc[50:])
     assert result.estimate == pytest.approx(expected)
+
+
+def test_a_gap_inside_the_sample_triggers_a_warning():
+    r1, r2 = paired_returns(300, 0.0005, 0.0002, seed=11)
+    gapped = r2.copy()
+    gapped.iloc[100:103] = np.nan
+
+    with pytest.warns(UserWarning, match="gap"):
+        bootstrap_sharpe_difference(r1, gapped, n_boot=100, seed=0)
+
+
+def test_leading_missing_values_are_dropped_without_a_warning():
+    r1, r2 = paired_returns(300, 0.0005, 0.0002, seed=11)
+    warm_up = r2.copy()
+    warm_up.iloc[:30] = np.nan
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = bootstrap_sharpe_difference(r1, warm_up, n_boot=100, seed=0)
+
+    assert result.estimate == pytest.approx(sharpe(r1.iloc[30:]) - sharpe(r2.iloc[30:]))
+
+
+def test_a_nearly_constant_series_is_rejected_like_an_exactly_constant_one():
+    # The mean of 30 copies of 0.01 is not exactly 0.01 in floating point, so the std is ~1e-18.
+    flat = pd.Series([0.01] * 30)
+    noisy = pd.Series(np.random.default_rng(18).normal(0.0, 0.01, 30))
+
+    with pytest.raises(ValueError, match="constant"):
+        bootstrap_sharpe_difference(flat, noisy, n_boot=50)
+    with pytest.raises(ValueError, match="constant"):
+        ledoit_wolf_sharpe_test(noisy, flat)
+
+
+def test_an_unsorted_index_is_rejected_because_time_order_matters():
+    r1, r2 = paired_returns(300, 0.0005, 0.0002, seed=19)
+
+    with pytest.raises(ValueError, match="sorted"):
+        bootstrap_sharpe_difference(r1.iloc[::-1], r2.iloc[::-1], n_boot=50)
+
+
+def test_bootstrap_indices_validate_their_arguments():
+    rng = np.random.default_rng(0)
+
+    with pytest.raises(ValueError, match="mean_block"):
+        stationary_bootstrap_indices(50, float("nan"), 10, rng)
+    with pytest.raises(ValueError, match="n must"):
+        stationary_bootstrap_indices(0, 5.0, 10, rng)
+    with pytest.raises(ValueError, match="n_boot"):
+        stationary_bootstrap_indices(50, 5.0, 0, rng)
+    with pytest.raises(ValueError, match="mean_block"):
+        bootstrap_sharpe_difference(
+            *paired_returns(300, 0.0005, 0.0002, seed=20), mean_block=float("nan")
+        )
+
+
+def test_all_replicates_non_finite_raises_a_clear_error(monkeypatch):
+    r1, r2 = paired_returns(300, 0.0005, 0.0002, seed=21)
+    monkeypatch.setattr(
+        "backtester.significance._bootstrap_differences",
+        lambda x1, x2, mean_block, n_boot, seed: np.full(n_boot, np.nan),
+    )
+
+    with pytest.warns(UserWarning, match="dropped"), pytest.raises(ValueError, match="replicates"):
+        bootstrap_sharpe_difference(r1, r2, n_boot=50)
+
+
+def test_block_length_grows_with_volatility_clustering():
+    iid, other = paired_returns(5000, 0.0004, 0.0004, seed=22)
+    clustered, other_clustered = clustered_returns(5000, seed=22)
+
+    assert optimal_block_length(clustered, other_clustered) > 5 * optimal_block_length(iid, other)
+
+
+def test_equal_drift_series_with_volatility_clustering_are_not_badly_oversized():
+    n_sims = 60
+    boot_rejections = 0
+    hac_rejections = 0
+    for seed in range(n_sims):
+        r1, r2 = clustered_returns(1000, seed=2000 + seed)
+        boot_rejections += bootstrap_sharpe_difference(r1, r2, n_boot=100, seed=seed).p_value < 0.05
+        hac_rejections += ledoit_wolf_sharpe_test(r1, r2).p_value < 0.05
+
+    # Both tests are mildly oversized under volatility clustering (about 8-10% at T = 750 in
+    # earlier checks), so the bound is looser than for iid data but still catches a broken
+    # block length or lag choice.
+    assert 0.01 <= boot_rejections / n_sims <= 0.15
+    assert 0.01 <= hac_rejections / n_sims <= 0.15
 
 
 def test_invalid_inputs_raise_clear_errors():

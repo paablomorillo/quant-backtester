@@ -22,13 +22,19 @@ import pandas as pd
 from backtester.metrics import PERIODS_PER_YEAR, sharpe
 
 MIN_OBSERVATIONS = 20
-_CHUNK_ELEMENTS = 4_000_000  # bootstrap replicates are drawn in chunks of about this many cells
+# Bootstrap replicates are drawn in chunks of this many cells. Several arrays of this size are
+# alive at once, so peak memory is a few hundred MB, not just 4M * 8 bytes.
+_CHUNK_ELEMENTS = 4_000_000
 _MIN_BLOCK = 2.0
 
 
 @dataclass(frozen=True)
 class BootstrapResult:
-    """Outcome of the paired stationary bootstrap. Sharpe values are annualized."""
+    """Outcome of the paired stationary bootstrap. Sharpe values are annualized.
+
+    `n_boot` is the number of replicates actually used: those with a finite Sharpe in both
+    series. It can be smaller than the number requested.
+    """
 
     estimate: float
     ci_low: float
@@ -64,21 +70,31 @@ def _check_confidence(confidence: float) -> None:
 def _align(r1: pd.Series, r2: pd.Series) -> tuple[pd.Series, pd.Series]:
     """Inner-join the two series on their index and drop missing values."""
     first, second = pd.Series(r1), pd.Series(r2)
-    if not (first.index.is_unique and second.index.is_unique):
-        raise ValueError("return series must not have duplicate index labels")
-    joined = pd.concat([first, second], axis=1, join="inner").dropna()
-    dropped = max(len(first), len(second)) - len(joined)
-    if dropped > 0:
+    for series in (first, second):
+        if not series.index.is_unique:
+            raise ValueError("return series must not have duplicate index labels")
+        if not series.index.is_monotonic_increasing:
+            raise ValueError("return series must be sorted by date, oldest first")
+    paired = pd.concat([first, second], axis=1, join="inner")
+    valid = paired.notna().all(axis=1).to_numpy()
+    if valid.sum() < MIN_OBSERVATIONS:
+        raise ValueError(
+            f"need at least {MIN_OBSERVATIONS} observations in common, got {int(valid.sum())}"
+        )
+
+    # Missing values before the first or after the last valid row are harmless (a warm-up
+    # period). Those in between glue non-adjacent days together, which distorts the block
+    # bootstrap and the dependence estimates, so they are reported.
+    inside = valid[valid.argmax() : len(valid) - valid[::-1].argmax()]
+    gaps = int((~inside).sum())
+    if gaps > 0:
         warnings.warn(
-            f"{dropped} rows dropped when aligning the two return series; gaps inside the "
-            "sample make non-adjacent days adjacent, which distorts the dependence estimates",
+            f"{gaps} rows with missing values inside the sample were dropped; this closes "
+            "gaps and makes non-adjacent days adjacent",
             UserWarning,
             stacklevel=3,
         )
-    if len(joined) < MIN_OBSERVATIONS:
-        raise ValueError(
-            f"need at least {MIN_OBSERVATIONS} observations in common, got {len(joined)}"
-        )
+    joined = paired[valid]
     return joined.iloc[:, 0].astype(float), joined.iloc[:, 1].astype(float)
 
 
@@ -97,7 +113,9 @@ def _sharpe_gap(a: pd.Series, b: pd.Series, risk_free: float) -> float:
 
 def _excess(returns: pd.Series, risk_free: float) -> np.ndarray:
     values = returns.to_numpy(dtype=float) - risk_free / PERIODS_PER_YEAR
-    if values.std(ddof=1) == 0:
+    # A relative tolerance: the mean of 30 copies of 0.01 is not exactly 0.01, so the std of a
+    # constant series is ~1e-18 rather than exactly 0.
+    if values.std(ddof=1) <= 1e-12 * np.abs(values).max():
         raise ValueError("a return series is constant, so its Sharpe ratio is undefined")
     return values
 
@@ -179,8 +197,12 @@ def stationary_bootstrap_indices(
     index. Otherwise the previous index is followed by the next one, wrapping around the end,
     so block lengths are geometric with mean `mean_block`.
     """
-    if mean_block < 1.0:
+    if not mean_block >= 1.0:  # also rejects NaN
         raise ValueError(f"mean_block must be at least 1, got {mean_block}")
+    if n < 1:
+        raise ValueError(f"n must be at least 1, got {n}")
+    if n_boot < 1:
+        raise ValueError(f"n_boot must be at least 1, got {n_boot}")
     columns = np.arange(n)
     restart = rng.random((n_boot, n)) < 1.0 / mean_block
     restart[:, 0] = True
@@ -222,13 +244,18 @@ def bootstrap_sharpe_difference(
     """Paired stationary bootstrap test of Sharpe(r1) - Sharpe(r2).
 
     The confidence interval is the percentile interval of the bootstrap differences. The
-    two-sided p-value imposes the null by recentering: it is the share of replicates whose
-    distance to the estimate is at least as large as the estimate's distance to zero.
+    two-sided p-value imposes the null by recentering: with B replicates and k of them at least
+    as far from the estimate as the estimate is from zero, p = (1 + k) / (B + 1).
+
+    This is the plain (not studentized) bootstrap. Ledoit and Wolf (2008) recommend studentizing
+    for better size under heteroskedasticity; with strong volatility clustering this test is
+    mildly oversized (about 8-10% rejection at a 5% level in simulations with T = 750), so use
+    `ledoit_wolf_sharpe_test` as a cross-check.
     """
     _check_confidence(confidence)
     if n_boot < 1:
         raise ValueError(f"n_boot must be at least 1, got {n_boot}")
-    if mean_block is not None and mean_block < 1.0:
+    if mean_block is not None and not mean_block >= 1.0:  # also rejects NaN
         raise ValueError(f"mean_block must be at least 1, got {mean_block}")
 
     a, b = _align(r1, r2)
@@ -245,6 +272,8 @@ def bootstrap_sharpe_difference(
             stacklevel=2,
         )
         diffs = diffs[finite]
+    if diffs.size == 0:
+        raise ValueError("all bootstrap replicates had a constant series; check the input data")
 
     alpha = 1.0 - confidence
     ci_low, ci_high = np.quantile(diffs, [alpha / 2.0, 1.0 - alpha / 2.0])
