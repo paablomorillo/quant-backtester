@@ -7,6 +7,8 @@ Two independent routes to the same question, "is Sharpe(r1) - Sharpe(r2) differe
 - `ledoit_wolf_sharpe_test`: the HAC-based asymptotic test of Ledoit & Wolf (2008).
 
 Both use the same statistic as `metrics.sharpe`: annualized (252 days), on simple daily returns.
+
+`holm_adjust` corrects the p-values when several such comparisons are made at once.
 """
 
 from __future__ import annotations
@@ -370,3 +372,29 @@ def ledoit_wolf_sharpe_test(
         lags=lags,
         confidence=confidence,
     )
+
+
+# --- multiple comparisons ---------------------------------------------------------------
+
+
+def holm_adjust(p_values: pd.Series) -> pd.Series:
+    """Holm (1979) step-down adjustment of the p-values of a family of tests.
+
+    Testing m hypotheses at 5% each gives more than a 5% chance of at least one false positive.
+    Holm controls that family-wise error rate: sort the p-values, multiply the smallest by m,
+    the next by m - 1, ..., the largest by 1, then make the sequence non-decreasing and cap it
+    at 1. A hypothesis is rejected at level alpha if its adjusted p-value is below alpha.
+
+    It makes no assumption about the dependence between the tests and is never less powerful
+    than Bonferroni. The result keeps the index and order of the input.
+    """
+    p = p_values.to_numpy(dtype=float)
+    if p.size == 0 or np.isnan(p).any() or (p < 0).any() or (p > 1).any():
+        raise ValueError("p-values must be a non-empty set of numbers between 0 and 1")
+
+    order = np.argsort(p, kind="stable")
+    multipliers = p.size - np.arange(p.size)
+    stepped = np.minimum(1.0, np.maximum.accumulate(p[order] * multipliers))
+    adjusted = np.empty_like(p)
+    adjusted[order] = stepped
+    return pd.Series(adjusted, index=p_values.index, name=p_values.name)

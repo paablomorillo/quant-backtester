@@ -12,6 +12,7 @@ from backtester.significance import (
     _politis_white,
     _sharpe_gradient,
     bootstrap_sharpe_difference,
+    holm_adjust,
     ledoit_wolf_sharpe_test,
     optimal_block_length,
     stationary_bootstrap_indices,
@@ -389,3 +390,36 @@ def test_results_are_immutable():
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         result.p_value = 0.0  # type: ignore[misc]
+
+
+def test_holm_adjust_by_hand():
+    """Three tests, p = 0.01, 0.04, 0.03. Sorted: 0.01, 0.03, 0.04, multiplied by 3, 2, 1:
+    0.03, 0.06, 0.04. The adjusted values cannot decrease, so the last one is raised to 0.06.
+    """
+    p = pd.Series({"a": 0.01, "b": 0.04, "c": 0.03})
+
+    adjusted = holm_adjust(p)
+
+    assert list(adjusted.index) == ["a", "b", "c"]  # same order as the input
+    assert adjusted.to_dict() == pytest.approx({"a": 0.03, "b": 0.06, "c": 0.06})
+
+
+def test_holm_adjust_caps_at_one_and_leaves_a_single_test_alone():
+    capped = holm_adjust(pd.Series([0.5, 0.9]))  # 2 * 0.5 = 1.0, then max(1.0, 0.9)
+    assert capped.tolist() == pytest.approx([1.0, 1.0])
+    assert holm_adjust(pd.Series([0.03])).tolist() == pytest.approx([0.03])
+
+
+def test_holm_adjust_is_between_raw_and_bonferroni():
+    p = pd.Series(np.random.default_rng(0).uniform(0, 1, 20))
+
+    adjusted = holm_adjust(p)
+
+    assert (adjusted >= p - 1e-12).all()
+    assert (adjusted <= np.minimum(1.0, p * len(p)) + 1e-12).all()
+
+
+@pytest.mark.parametrize("values", [[], [0.2, np.nan], [0.2, 1.5], [-0.1, 0.2]])
+def test_holm_adjust_rejects_invalid_p_values(values):
+    with pytest.raises(ValueError, match="p-values"):
+        holm_adjust(pd.Series(values, dtype=float))
