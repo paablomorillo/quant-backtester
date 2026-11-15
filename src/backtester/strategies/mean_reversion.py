@@ -22,6 +22,8 @@ class MeanReversion(Strategy):
 
     long_short=True also shorts the `top_n` most overbought (a market-neutral portfolio).
     An asset whose price was flat over the whole window has no z-score and is not traded.
+    Assets with exactly the same z-score share an average rank, so a tie at the `top_n`
+    boundary can select more or fewer than `top_n` names (same rule as momentum).
     """
 
     name = "mean_reversion"

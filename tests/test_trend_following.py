@@ -57,6 +57,7 @@ def test_each_weight_is_zero_or_one_over_n():
     w = TrendFollowing(window=50).weights(prices)
     assert (w.iloc[:49] == 0).all(axis=None)
     assert np.isin(w.to_numpy(), [0.0, 0.25]).all()
+    assert (w == 0.25).any(axis=None)
     assert (w.sum(axis=1) <= 1.0 + 1e-12).all()
 
 

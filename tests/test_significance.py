@@ -405,7 +405,7 @@ def test_holm_adjust_by_hand():
 
 
 def test_holm_adjust_caps_at_one_and_leaves_a_single_test_alone():
-    capped = holm_adjust(pd.Series([0.5, 0.9]))  # 2 * 0.5 = 1.0, then max(1.0, 0.9)
+    capped = holm_adjust(pd.Series([0.6, 0.9]))  # 2 * 0.6 = 1.2 -> 1.0, then max(1.0, 0.9)
     assert capped.tolist() == pytest.approx([1.0, 1.0])
     assert holm_adjust(pd.Series([0.03])).tolist() == pytest.approx([0.03])
 

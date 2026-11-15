@@ -17,8 +17,9 @@ class TrendFollowing(Strategy):
     exposure goes from 0 (nothing trending) to 1 (everything trending).
 
     The idea is that trends persist, so stepping aside below the average avoids part of the
-    long drawdowns. Faber (2007) uses this rule with a 10-month average (about 200 sessions);
-    Moskowitz, Ooi and Pedersen (2012) document the underlying time-series momentum effect.
+    long drawdowns. Faber (2007) uses this rule with a 10-month average (about 200 sessions).
+    Moskowitz, Ooi and Pedersen (2012) document the related time-series momentum effect with
+    a different rule: the sign of each asset's own past 12-month return.
     """
 
     name = "trend_following"
