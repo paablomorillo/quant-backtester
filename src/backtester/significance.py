@@ -8,6 +8,9 @@ Two independent routes to the same question, "is Sharpe(r1) - Sharpe(r2) differe
 
 Both use the same statistic as `metrics.sharpe`: annualized (252 days), on simple daily returns.
 
+`bootstrap_sharpe` is the one-sample version of the bootstrap: a single Sharpe ratio against
+zero, for strategies whose benchmark is cash.
+
 `holm_adjust` corrects the p-values when several such comparisons are made at once.
 """
 
@@ -32,9 +35,9 @@ _MIN_BLOCK = 2.0
 
 @dataclass(frozen=True)
 class BootstrapResult:
-    """Outcome of the paired stationary bootstrap. Sharpe values are annualized.
+    """Outcome of a stationary bootstrap test (paired or one-sample). Sharpe values are annualized.
 
-    `n_boot` is the number of replicates actually used: those with a finite Sharpe in both
+    `n_boot` is the number of replicates actually used: those with a finite Sharpe in every
     series. It can be smaller than the number requested.
     """
 
@@ -288,6 +291,65 @@ def bootstrap_sharpe_difference(
         p_value=float(p_value),
         block_length=block,
         n_boot=len(diffs),
+        confidence=confidence,
+    )
+
+
+def bootstrap_sharpe(
+    returns: pd.Series,
+    mean_block: float | None = None,
+    n_boot: int = 10_000,
+    confidence: float = 0.95,
+    seed: int = 0,
+    risk_free: float = 0.0,
+) -> BootstrapResult:
+    """Stationary bootstrap test of a single Sharpe ratio against zero.
+
+    The one-sample version of `bootstrap_sharpe_difference`, for strategies whose natural
+    benchmark is cash (e.g. a market-neutral one): the question is whether the Sharpe ratio
+    is different from zero, not whether it beats another risky series. Same percentile interval
+    and same recentered two-sided p-value. The block length is the largest Politis-White block
+    of the returns and of their squares, rounded up and never below 2.
+    """
+    _check_confidence(confidence)
+    if n_boot < 1:
+        raise ValueError(f"n_boot must be at least 1, got {n_boot}")
+    if mean_block is not None and not mean_block >= 1.0:  # also rejects NaN
+        raise ValueError(f"mean_block must be at least 1, got {mean_block}")
+
+    clean, _ = _align(returns, returns)  # same checks and missing-value rules as the paired test
+    x = _excess(clean, risk_free)
+    block = _paired_block_length(x, x) if mean_block is None else float(mean_block)
+
+    estimate = float(sharpe(clean, risk_free))
+    rng = np.random.default_rng(seed)
+    chunk = max(1, _CHUNK_ELEMENTS // len(x))
+    pieces = []
+    for done in range(0, n_boot, chunk):
+        idx = stationary_bootstrap_indices(len(x), block, min(chunk, n_boot - done), rng)
+        pieces.append(_annualized_sharpe_rows(x[idx]))
+    sharpes = np.concatenate(pieces)
+    finite = np.isfinite(sharpes)
+    if not finite.all():
+        warnings.warn(
+            f"{int((~finite).sum())} bootstrap replicates had a constant series and were dropped",
+            UserWarning,
+            stacklevel=2,
+        )
+        sharpes = sharpes[finite]
+    if sharpes.size == 0:
+        raise ValueError("all bootstrap replicates had a constant series; check the input data")
+
+    alpha = 1.0 - confidence
+    ci_low, ci_high = np.quantile(sharpes, [alpha / 2.0, 1.0 - alpha / 2.0])
+    extreme = np.abs(sharpes - estimate) >= abs(estimate)
+    return BootstrapResult(
+        estimate=estimate,
+        ci_low=float(ci_low),
+        ci_high=float(ci_high),
+        p_value=float((1 + int(extreme.sum())) / (len(sharpes) + 1)),
+        block_length=block,
+        n_boot=len(sharpes),
         confidence=confidence,
     )
 

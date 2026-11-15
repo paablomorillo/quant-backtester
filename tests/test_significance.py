@@ -11,6 +11,7 @@ from backtester.metrics import sharpe
 from backtester.significance import (
     _politis_white,
     _sharpe_gradient,
+    bootstrap_sharpe,
     bootstrap_sharpe_difference,
     holm_adjust,
     ledoit_wolf_sharpe_test,
@@ -423,3 +424,82 @@ def test_holm_adjust_is_between_raw_and_bonferroni():
 def test_holm_adjust_rejects_invalid_p_values(values):
     with pytest.raises(ValueError, match="p-values"):
         holm_adjust(pd.Series(values, dtype=float))
+
+
+# --- one-sample bootstrap of the Sharpe ratio -------------------------------------------
+
+
+def single_returns(n: int, drift: float, seed: int) -> pd.Series:
+    rng = np.random.default_rng(seed)
+    return pd.Series(rng.normal(drift, 0.01, n), index=pd.bdate_range("2010-01-01", periods=n))
+
+
+def test_one_sample_estimate_is_the_hand_computed_sharpe():
+    # Alternates between 0.01 and 0.03: mean 0.02, std = 0.01 * sqrt(40 / 39) with 40 values.
+    r = pd.Series([0.01, 0.03] * 20)
+
+    result = bootstrap_sharpe(r, mean_block=2.0, n_boot=50, seed=0)
+
+    assert result.estimate == pytest.approx(0.02 / (0.01 * np.sqrt(40 / 39)) * np.sqrt(252))
+    assert result.estimate == pytest.approx(sharpe(r))
+
+
+def test_one_sample_clearly_positive_drift_is_significant():
+    result = bootstrap_sharpe(single_returns(N_DAYS, 0.0015, seed=11), n_boot=2000, seed=0)
+
+    assert result.p_value < 0.01
+    assert result.ci_low > 0
+    assert result.ci_low < result.estimate < result.ci_high
+
+
+def test_one_sample_zero_drift_is_rejected_about_as_often_as_the_nominal_level():
+    n_sims = 100
+    rejections = sum(
+        bootstrap_sharpe(single_returns(750, 0.0, seed=2000 + seed), n_boot=100, seed=seed).p_value
+        < 0.05
+        for seed in range(n_sims)
+    )
+    # Same bounds as the paired test: 12% is three standard errors above the nominal 5%.
+    assert 0.01 <= rejections / n_sims <= 0.12
+
+
+def test_one_sample_negated_returns_mirror_the_result():
+    """With the same seed the same days are resampled, so -r gives the mirror image."""
+    r = single_returns(500, 0.0005, seed=12)
+
+    up = bootstrap_sharpe(r, mean_block=5.0, n_boot=300, seed=3)
+    down = bootstrap_sharpe(-r, mean_block=5.0, n_boot=300, seed=3)
+
+    assert down.estimate == pytest.approx(-up.estimate)
+    assert (down.ci_low, down.ci_high) == pytest.approx((-up.ci_high, -up.ci_low))
+    assert down.p_value == up.p_value
+
+
+def test_one_sample_risk_free_rate_lowers_the_sharpe():
+    r = single_returns(500, 0.0005, seed=13)
+    result = bootstrap_sharpe(r, n_boot=50, seed=0, risk_free=0.03)
+    assert result.estimate == pytest.approx(sharpe(r, 0.03))
+
+
+def test_one_sample_block_length_covers_volatility_clustering():
+    calm, _ = paired_returns(N_DAYS, 0.0004, 0.0004, seed=14)
+    stormy, _ = clustered_returns(N_DAYS, seed=14)
+    assert (
+        bootstrap_sharpe(stormy, n_boot=20).block_length
+        > bootstrap_sharpe(calm, n_boot=20).block_length
+    )
+
+
+def test_one_sample_ignores_a_leading_warm_up_and_rejects_bad_input():
+    r = single_returns(300, 0.0005, seed=15)
+    padded = pd.concat([pd.Series([np.nan] * 5, index=r.index[:5] - pd.Timedelta(days=30)), r])
+
+    assert bootstrap_sharpe(padded, n_boot=50, seed=1) == bootstrap_sharpe(r, n_boot=50, seed=1)
+    with pytest.raises(ValueError):
+        bootstrap_sharpe(pd.Series([0.01] * 50), n_boot=50)
+    with pytest.raises(ValueError):
+        bootstrap_sharpe(r, n_boot=0)
+    with pytest.raises(ValueError):
+        bootstrap_sharpe(r, mean_block=0.5)
+    with pytest.raises(ValueError):
+        bootstrap_sharpe(r, confidence=1.0)
