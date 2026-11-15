@@ -17,9 +17,10 @@ Each phase ends with: tests green, CI green, README updated and a commit/tag.
 - [x] Weight drift between rebalances
 
 ## Phase 2 — More strategies (2-3 weeks)
-- [ ] Short-term mean reversion (z-score over a moving average)
+- [x] Short-term mean reversion (z-score over a moving average)
 - [ ] Pairs trading: cointegration test (Engle-Granger), spread and entry/exit z-score
-- [ ] Time-series trend following (a signal per asset, not cross-sectional)
+- [x] Time-series trend following (a signal per asset, not cross-sectional)
+- [x] Notebook `02_strategies_comparison.ipynb`: momentum, mean reversion and trend following vs. equal weight, with Holm-corrected Sharpe difference tests
 - [ ] Volatility targeting as a layer on top of any strategy
 
 ## Phase 3 — Statistical rigor (what sets the project apart)

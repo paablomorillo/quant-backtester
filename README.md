@@ -11,15 +11,15 @@ rigor: no look-ahead bias, transaction costs included, and out-of-sample validat
 - Deducts costs proportional to turnover
 - Computes CAGR, volatility, Sharpe, Sortino, max drawdown, Calmar and turnover
 - Daily, weekly or monthly rebalancing
-- Tests whether the Sharpe difference between two strategies is significant (paired stationary bootstrap and Ledoit-Wolf HAC test)
+- Tests whether the Sharpe difference between two strategies is significant (paired stationary bootstrap and Ledoit-Wolf HAC test), with the Holm correction when several strategies are compared
 
 ## Strategies
 | Strategy | Status |
 |---|---|
 | 12-1 cross-sectional momentum (long-only / long-short) | ✅ |
-| Mean reversion | ⏳ |
+| Short-term mean reversion, price z-score (long-only / long-short) | ✅ |
+| Time-series trend following (price above its moving average, else cash) | ✅ |
 | Pairs trading (cointegration) | ⏳ |
-| Time-series trend following | ⏳ |
 
 ## Installation
 ```bash
@@ -79,6 +79,37 @@ agrees (p = 0.93).
 Full analysis, data checks and interpretation in
 [notebooks/01_sector_momentum.ipynb](notebooks/01_sector_momentum.ipynb).
 
+### Three strategies against equal weight
+Momentum, mean reversion and trend following on the same 9 sector ETFs, all with 5 bps of costs
+and monthly rebalancing, over the same period. Parameters were fixed before looking at the
+results and each strategy was run once.
+
+![Equity and drawdown of the three strategies vs. equal weight](docs/img/strategies_comparison.png)
+
+| | 12-1 momentum | Mean reversion | Trend following | Equal weight |
+|---|---|---|---|---|
+| CAGR | 10.9% | 10.6% | 8.0% | 10.5% |
+| Annual volatility | 18.8% | 20.0% | 10.4% | 18.3% |
+| Sharpe | 0.64 | 0.60 | 0.80 | 0.64 |
+| Max drawdown | −45.0% | −53.0% | −17.1% | −53.5% |
+| Annual turnover | 5.2 | 15.7 | 1.9 | 0.3 |
+| Sharpe difference vs. equal weight | +0.01 | −0.03 | +0.16 | |
+| Bootstrap p-value (raw / Holm) | 0.92 / 1.00 | 0.57 / 1.00 | 0.32 / 0.96 | |
+
+**None of the three beats equal weight in a way that can be told apart from luck.** Trend
+following has the best Sharpe and a much smaller drawdown, but it is a different portfolio
+rather than a better one: it is 75% invested on average, earns 2.5 points less per year, and
+its advantage rests on one year (2008: −10.7% against −35.5%; without it the Sharpe ratios are
+0.88 and 0.84). The 95% interval of its Sharpe difference is about −0.14 to +0.45. Mean reversion behaves like equal weight (correlation 0.93)
+while turning the portfolio over about 16 times a year; monthly rebalancing is a poor setting for a 20-day signal.
+
+Testing three strategies against the same benchmark is a multiple comparison, so the table shows
+Holm-adjusted p-values next to the raw ones. The adjustment covers only these three tests, not
+the earlier choices of universe and parameters.
+
+Full analysis in
+[notebooks/02_strategies_comparison.ipynb](notebooks/02_strategies_comparison.ipynb).
+
 ## Tests
 ```bash
 pytest
@@ -96,7 +127,7 @@ src/backtester/
 ├── engine.py        # run_backtest
 ├── costs.py         # cost models
 ├── metrics.py       # performance and risk metrics
-├── significance.py  # paired bootstrap and Ledoit-Wolf tests for Sharpe differences
+├── significance.py  # paired bootstrap and Ledoit-Wolf tests for Sharpe differences, Holm correction
 └── report.py        # plots and comparisons
 tests/               # pytest, no network
 examples/            # runnable scripts
