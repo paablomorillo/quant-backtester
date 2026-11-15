@@ -12,6 +12,8 @@ rigor: no look-ahead bias, transaction costs included, and out-of-sample validat
 - Computes CAGR, volatility, Sharpe, Sortino, max drawdown, Calmar and turnover
 - Daily, weekly or monthly rebalancing
 - Tests whether the Sharpe difference between two strategies is significant (paired stationary bootstrap and Ledoit-Wolf HAC test), with the Holm correction when several strategies are compared, and whether a single Sharpe ratio differs from zero (one-sample stationary bootstrap)
+- Runs a strategy over a grid of parameter values and plots the Sharpe heatmap, to tell a plateau from an isolated spike
+- Computes the Deflated Sharpe Ratio, which corrects the best Sharpe ratio for the number of configurations tried
 
 ## Strategies
 | Strategy | Status |
@@ -82,7 +84,8 @@ Full analysis, data checks and interpretation in
 ### Three strategies against equal weight
 Momentum, mean reversion and trend following on the same 9 sector ETFs, all with 5 bps of costs
 and monthly rebalancing, over the same period. Parameters were fixed before looking at the
-results and each strategy was run once.
+results and each strategy was run once for this comparison (other parameter values are tried
+later, in the robustness section).
 
 ![Equity and drawdown of the three strategies vs. equal weight](docs/img/strategies_comparison.png)
 
@@ -115,7 +118,8 @@ KO/PEP, XOM/CVX, GLD/GDX and EWA/EWC, chosen for their economic link before look
 result. Every 21 sessions the hedge ratio and an Engle-Granger cointegration test are
 re-estimated on the last 252 closes; a pair is traded only while it passes the test. Entry at
 |z| > 2, exit at |z| < 0.5, stop at |z| > 4, at most 63 sessions per trade, 5 bps of costs.
-Parameters fixed in advance, one run. Period: 2007-05-22 to 2026-10-30.
+Parameters fixed in advance, one run for this result (other values are tried later, in the
+robustness section). Period: 2007-05-22 to 2026-10-30.
 
 ![Equity of each pair and of the four together, and when each pair was tradable](docs/img/pairs_trading.png)
 
@@ -144,6 +148,62 @@ textbook examples, which favours the strategy, and borrowing costs are not model
 
 Full analysis in [notebooks/03_pairs_trading.ipynb](notebooks/03_pairs_trading.ipynb).
 
+### Robustness: parameter sensitivity and the Deflated Sharpe Ratio
+The results above use parameters fixed in advance. This section asks whether they depend on those
+exact values, and whether the best configuration found in the whole project survives a correction
+for the number of configurations tried. Same data, 5 bps of costs, monthly rebalancing (none for
+pairs trading). The grids are a diagnostic: nothing is re-tuned and the headline results stay
+those of the pre-fixed parameters. Sector grids run from 2006-08-01 and the pairs grid from
+2008-05-21, a few months later than above, so that every cell of a grid covers the same days.
+
+![Sharpe ratio of each strategy for every parameter combination](docs/img/sensitivity.png)
+
+| | Momentum | Mean reversion | Trend following | Pairs trading |
+|---|---|---|---|---|
+| Grid | lookback × top_n | lookback × top_n | window | formation × entry z |
+| Sharpe of the pre-fixed parameters | 0.67 | 0.61 | 0.81 | −0.16 |
+| Rank in the grid | 1 of 30 | 7 of 25 | 2 of 10 | 15 of 20 |
+| Mean of the neighbouring cells | 0.58 | 0.57 | 0.81 | −0.18 |
+| Grid median | 0.58 | 0.57 | 0.77 | −0.12 |
+| Benchmark over the same period | 0.64 | 0.64 | 0.64 | 0 (cash) |
+| Shape | Local peak on a flat surface | Smooth slope, no peak | Plateau | Noise around zero |
+
+- **Trend following sits on a plateau**: any window from 150 to 250 sessions gives 0.78 to 0.81.
+- **Momentum's pre-fixed parameters were the luckiest cell of their grid.** 28 of the 30
+  combinations are below equal weight, so "momentum matches equal weight" was the favourable
+  reading; a typical momentum configuration on these sectors is slightly behind it.
+- **Mean reversion and pairs trading have no parameter set that rescues them**: 23 of 25 mean
+  reversion cells are below equal weight and 17 of 20 pairs cells are below zero.
+
+**98 configurations have been looked at in this project**: 85 grid cells (which include the four
+pre-fixed ones), 9 other runs in notebooks 01 and 03, and 4 on an earlier version of the engine.
+The best of them is trend following with a 175-day window, with a Sharpe of 0.81. Its Deflated
+Sharpe Ratio (Bailey & López de Prado, 2014) is the probability that its true Sharpe ratio is
+above what the best of that many skill-less strategies would be expected to show; 0.95 is the
+usual bar.
+
+| Deflated Sharpe Ratio of the best configuration | Trials | Expected best Sharpe with no skill | Sharpe of the best | DSR |
+|---|---|---|---|---|
+| Against cash, all trials as if independent | 98 | 0.79 | 0.81 | 0.54 |
+| Against cash, effective number of trials | 51 | 0.72 | 0.81 | 0.67 |
+| Against cash, sector trials only | 73 | 0.26 | 0.81 | 0.99 |
+| Against equal weight, sector trials | 70 | 0.36 | 0.35 | 0.48 |
+| Against equal weight, effective number of trials | 51 | 0.34 | 0.35 | 0.52 |
+
+**No configuration survives the correction.** Counting every trial, the best Sharpe ratio is a
+coin flip against the best of 98 lucky draws. The 0.99 of the third row is not a contradiction:
+it measures against zero, and every sector trial is a long-only equity portfolio in 20 years in
+which equal weight alone earned 0.64. It says that owning equities paid. Against equal weight,
+which is the question asked throughout, the best of 70 sector trials (mean reversion with a 5-day
+lookback holding 5 sectors) has a DSR of about 0.5: what luck alone would produce.
+
+The DSR assumes independent trials of the same kind; here they are correlated within a grid and
+come from different strategies and two universes, which is why the first three rows differ so
+much. The count covers what was run in this repository, not the earlier choices of universe and
+strategy families.
+
+Full analysis in [notebooks/04_robustness.ipynb](notebooks/04_robustness.ipynb).
+
 ## Tests
 ```bash
 pytest
@@ -161,8 +221,9 @@ src/backtester/
 ├── engine.py        # run_backtest
 ├── costs.py         # cost models
 ├── metrics.py       # performance and risk metrics
-├── significance.py  # bootstrap and Ledoit-Wolf tests for Sharpe ratios and differences, Holm correction
-└── report.py        # plots and comparisons
+├── significance.py  # bootstrap and Ledoit-Wolf tests, Holm correction, Deflated Sharpe Ratio
+├── sensitivity.py   # one backtest per combination of a parameter grid
+└── report.py        # plots, Sharpe heatmaps and comparisons
 tests/               # pytest, no network
 examples/            # runnable scripts
 notebooks/           # analyses and demos

@@ -22,7 +22,9 @@ Sharpe caused by a methodological error.
 - `src/backtester/strategies/`: one strategy per file
 - `src/backtester/engine.py`: `run_backtest` applies weights, costs and rebalancing
 - `src/backtester/metrics.py`: metrics on simple daily returns (252 days/year)
-- `src/backtester/report.py`: plots and comparison tables
+- `src/backtester/significance.py`: Sharpe tests (bootstrap, Ledoit-Wolf, Holm) and the Deflated Sharpe Ratio
+- `src/backtester/sensitivity.py`: `run_grid` runs one backtest per parameter combination
+- `src/backtester/report.py`: plots, Sharpe heatmaps and comparison tables
 - `docs/ROADMAP.md`: project phases; tick the boxes as each item is finished
 
 ## Non-negotiable rules

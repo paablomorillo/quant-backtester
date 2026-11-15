@@ -27,8 +27,9 @@ Each phase ends with: tests green, CI green, README updated and a commit/tag.
 ## Phase 3 — Statistical rigor (what sets the project apart)
 - [ ] Walk-forward validation: optimize on a training window, evaluate out of sample
 - [x] Block bootstrap for Sharpe confidence intervals (paired stationary bootstrap for Sharpe differences, cross-checked with Ledoit-Wolf, and a one-sample version against zero, in `significance.py`)
-- [ ] Deflated Sharpe Ratio (López de Prado) to correct for the number of trials
-- [ ] Parameter sensitivity analysis (lookback × top_n heatmap)
+- [x] Deflated Sharpe Ratio (Bailey & López de Prado, 2014) to correct for the number of trials, in `significance.py`
+- [x] Parameter sensitivity analysis: Sharpe grids for the four strategies (`sensitivity.py`, heatmaps in `report.py`)
+- [x] Notebook `04_robustness.ipynb`: the four grids, the count of every configuration tried (98) and the DSR of the best one
 - [ ] More realistic costs: spread + impact proportional to volatility
 
 ## Phase 4 — Presentation
