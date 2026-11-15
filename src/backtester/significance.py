@@ -12,6 +12,11 @@ Both use the same statistic as `metrics.sharpe`: annualized (252 days), on simpl
 zero, for strategies whose benchmark is cash.
 
 `holm_adjust` corrects the p-values when several such comparisons are made at once.
+
+`deflated_sharpe_ratio` (Bailey & López de Prado, 2014) asks a different question: given that
+the strategy is the best of N that were tried, how likely is it that its true Sharpe ratio is
+above what the best of N skill-less strategies would show? `probabilistic_sharpe_ratio` and
+`expected_max_sharpe` are its two building blocks.
 """
 
 from __future__ import annotations
@@ -460,3 +465,172 @@ def holm_adjust(p_values: pd.Series) -> pd.Series:
     adjusted = np.empty_like(p)
     adjusted[order] = stepped
     return pd.Series(adjusted, index=p_values.index, name=p_values.name)
+
+
+# --- Deflated Sharpe Ratio (Bailey & López de Prado, 2014) ------------------------------
+
+EULER_GAMMA = 0.5772156649015329
+
+
+@dataclass(frozen=True)
+class DeflatedSharpeResult:
+    """Outcome of the Deflated Sharpe Ratio. Sharpe values are annualized.
+
+    `dsr` is a probability: how likely it is that the true Sharpe ratio is above
+    `expected_max_sharpe`, the Sharpe ratio that the best of `n_trials` strategies with no
+    skill at all is expected to show.
+    """
+
+    dsr: float
+    sharpe: float
+    expected_max_sharpe: float
+    n_trials: float
+    n_obs: int
+
+
+def return_moments(returns: pd.Series) -> tuple[float, float]:
+    """Skewness and kurtosis of a return series, as the Deflated Sharpe Ratio expects them.
+
+    The kurtosis is the plain fourth standardized moment, 3 for a normal distribution. It is
+    NOT the excess kurtosis that pandas `.kurt()` returns (0 for a normal). Both are the
+    population (biased) moments; missing values are dropped.
+    """
+    values = pd.Series(returns).dropna().to_numpy(dtype=float)
+    if len(values) < 2:
+        raise ValueError(f"need at least 2 observations, got {len(values)}")
+    centered = values - values.mean()
+    variance = (centered**2).mean()
+    if math.sqrt(variance) <= 1e-12 * np.abs(values).max():
+        raise ValueError("the return series is constant, so its moments are undefined")
+    return float((centered**3).mean() / variance**1.5), float((centered**4).mean() / variance**2)
+
+
+def effective_trials(returns: pd.DataFrame) -> float:
+    """Number of independent trials implied by the average correlation between the trials.
+
+    Each column is the return series of one trial. With N trials and an average pairwise
+    correlation rho, Bailey & López de Prado (2014) propose N_eff = rho + (1 - rho) * N: N when
+    the trials are uncorrelated and 1 when they are copies of each other. The result is kept
+    between 1 and N (a negative average correlation does not add trials).
+
+    It is a rough correction. Trials from neighbouring cells of a parameter grid are highly
+    correlated, and counting each as a full trial overstates how much was really tried.
+    """
+    n = returns.shape[1]
+    if n < 1:
+        raise ValueError("at least one trial is required")
+    if n == 1:
+        return 1.0
+    corr = returns.corr().to_numpy()
+    off_diagonal = corr[~np.eye(n, dtype=bool)]
+    if np.isnan(off_diagonal).any():
+        raise ValueError("a trial has constant returns, so its correlations are undefined")
+    rho = float(off_diagonal.mean())
+    return float(min(max(rho + (1.0 - rho) * n, 1.0), n))
+
+
+def expected_max_sharpe(n_trials: float, sharpe_variance: float) -> float:
+    """Expected largest Sharpe ratio among `n_trials` independent strategies with no skill.
+
+    If the true Sharpe ratio of every trial is zero and the estimates are normal with variance
+    `sharpe_variance` across trials, the expected maximum is approximately
+
+        sqrt(V) * ((1 - g) * Z(1 - 1/N) + g * Z(1 - 1/(N e)))
+
+    with g the Euler-Mascheroni constant and Z the inverse normal CDF. The result is in the
+    units of the variance: pass the variance of annualized Sharpe ratios to get an annualized
+    threshold, or of per-period ones to get a per-period threshold.
+
+    With a single trial nothing was selected and the threshold is 0. The approximation is meant
+    for large N and turns negative for N below about 1.5, so it is floored at 0. `n_trials` may
+    be fractional (see `effective_trials`).
+    """
+    if not n_trials >= 1:  # also rejects NaN
+        raise ValueError(f"n_trials must be at least 1, got {n_trials}")
+    if not sharpe_variance >= 0:
+        raise ValueError(f"sharpe_variance must not be negative, got {sharpe_variance}")
+    if n_trials == 1 or sharpe_variance == 0:
+        return 0.0
+    normal = NormalDist()
+    plain = normal.inv_cdf(1.0 - 1.0 / n_trials)
+    shifted = normal.inv_cdf(1.0 - 1.0 / (n_trials * math.e))
+    quantiles = (1.0 - EULER_GAMMA) * plain + EULER_GAMMA * shifted
+    return max(0.0, math.sqrt(sharpe_variance) * quantiles)
+
+
+def probabilistic_sharpe_ratio(
+    sharpe: float,
+    benchmark_sharpe: float,
+    n_obs: int,
+    skew: float = 0.0,
+    kurtosis: float = 3.0,
+    periods_per_year: int = PERIODS_PER_YEAR,
+) -> float:
+    """Probability that the true Sharpe ratio is above `benchmark_sharpe` (Bailey & LdP, 2012).
+
+    `sharpe` and `benchmark_sharpe` are annualized with `periods_per_year` (pass 1 if they are
+    already per period). The formula only holds per period, so both are divided by
+    sqrt(periods_per_year) first. With SR and SR* the per-period values and T = `n_obs`:
+
+        PSR = Phi( (SR - SR*) * sqrt(T - 1) / sqrt(1 - skew * SR + (kurtosis - 1) / 4 * SR^2) )
+
+    `skew` and `kurtosis` are those of the per-period returns, with kurtosis = 3 for a normal
+    (see `return_moments`). Negative skew and fat tails make the Sharpe ratio harder to
+    estimate and lower the probability. Returns are assumed to be serially independent.
+    """
+    if not (math.isfinite(sharpe) and math.isfinite(benchmark_sharpe)):
+        raise ValueError("sharpe and benchmark_sharpe must be finite")
+    if n_obs < 2:
+        raise ValueError(f"n_obs must be at least 2, got {n_obs}")
+    if not periods_per_year > 0:
+        raise ValueError(f"periods_per_year must be positive, got {periods_per_year}")
+    if not kurtosis >= 1.0 + skew**2:  # also rejects NaN
+        raise ValueError(
+            f"no distribution has skewness {skew} and kurtosis {kurtosis}: "
+            "kurtosis must be at least 1 + skewness^2 (it is 3 for a normal, not 0)"
+        )
+    scale = math.sqrt(periods_per_year)
+    sr = sharpe / scale
+    estimator_variance = 1.0 - skew * sr + (kurtosis - 1.0) / 4.0 * sr**2
+    if estimator_variance <= 0:
+        raise ValueError("the variance of the Sharpe estimator is not positive for these inputs")
+    z_score = (sharpe - benchmark_sharpe) / scale * math.sqrt(n_obs - 1)
+    return NormalDist().cdf(z_score / math.sqrt(estimator_variance))
+
+
+def deflated_sharpe_ratio(
+    sharpe: float,
+    n_trials: float,
+    sharpe_variance: float,
+    skew: float,
+    kurtosis: float,
+    n_obs: int,
+    periods_per_year: int = PERIODS_PER_YEAR,
+) -> DeflatedSharpeResult:
+    """Deflated Sharpe Ratio of the best of `n_trials` strategies (Bailey & López de Prado, 2014).
+
+    The best of many backtests has a high Sharpe ratio partly because it was selected. The DSR
+    is the probabilistic Sharpe ratio measured not against zero but against the Sharpe ratio
+    that the best of `n_trials` skill-less strategies is expected to show (`expected_max_sharpe`).
+
+    Units, the usual source of error:
+    - `sharpe` is annualized, as everywhere in this module, and `sharpe_variance` is the
+      variance ACROSS TRIALS of their annualized Sharpe ratios. Annualizing multiplies a Sharpe
+      ratio by sqrt(periods_per_year) and that variance by periods_per_year.
+    - To work in per-period units, as the paper does, pass per-period values and
+      `periods_per_year=1`. Both routes give the same DSR.
+    - `skew` and `kurtosis` describe the per-period returns of the selected strategy and
+      `n_obs` is its number of return observations. Kurtosis is 3 for a normal.
+
+    `n_trials` should count every configuration that was tried, not only those reported.
+    The trials are assumed independent; for correlated ones see `effective_trials`.
+    """
+    threshold = expected_max_sharpe(n_trials, sharpe_variance)
+    dsr = probabilistic_sharpe_ratio(sharpe, threshold, n_obs, skew, kurtosis, periods_per_year)
+    return DeflatedSharpeResult(
+        dsr=dsr,
+        sharpe=float(sharpe),
+        expected_max_sharpe=threshold,
+        n_trials=float(n_trials),
+        n_obs=int(n_obs),
+    )

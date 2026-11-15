@@ -1,7 +1,9 @@
 """Tests for the Sharpe-difference significance tests, on synthetic data with a known answer."""
 
 import dataclasses
+import math
 import warnings
+from statistics import NormalDist
 
 import numpy as np
 import pandas as pd
@@ -9,13 +11,19 @@ import pytest
 
 from backtester.metrics import sharpe
 from backtester.significance import (
+    EULER_GAMMA,
     _politis_white,
     _sharpe_gradient,
     bootstrap_sharpe,
     bootstrap_sharpe_difference,
+    deflated_sharpe_ratio,
+    effective_trials,
+    expected_max_sharpe,
     holm_adjust,
     ledoit_wolf_sharpe_test,
     optimal_block_length,
+    probabilistic_sharpe_ratio,
+    return_moments,
     stationary_bootstrap_indices,
 )
 
@@ -503,3 +511,159 @@ def test_one_sample_ignores_a_leading_warm_up_and_rejects_bad_input():
         bootstrap_sharpe(r, mean_block=0.5)
     with pytest.raises(ValueError):
         bootstrap_sharpe(r, confidence=1.0)
+
+
+# --- Deflated Sharpe Ratio (Bailey & López de Prado, 2014) ------------------------------
+
+
+def test_psr_matches_a_hand_computed_case():
+    """Normal returns, per-period Sharpe 0.1, T = 101: z = 0.1 * 10 / sqrt(1 + 0.1^2 / 2)."""
+    psr = probabilistic_sharpe_ratio(0.1, 0.0, n_obs=101, periods_per_year=1)
+    assert psr == pytest.approx(NormalDist().cdf(1.0 / math.sqrt(1.005)))
+    assert psr == pytest.approx(0.8407, abs=1e-4)
+
+
+def test_psr_is_one_half_when_the_sharpe_equals_the_benchmark():
+    assert probabilistic_sharpe_ratio(0.7, 0.7, n_obs=500, skew=-1.0, kurtosis=6.0) == 0.5
+
+
+def test_psr_penalizes_negative_skew_and_fat_tails():
+    normal = probabilistic_sharpe_ratio(1.0, 0.0, n_obs=1000)
+    assert probabilistic_sharpe_ratio(1.0, 0.0, n_obs=1000, skew=-1.0) < normal
+    assert probabilistic_sharpe_ratio(1.0, 0.0, n_obs=1000, kurtosis=9.0) < normal
+
+
+def test_expected_max_sharpe_matches_a_hand_computed_case():
+    """N = 2, unit variance: (1 - g) * z(1/2) + g * z(1 - 1/(2e)), and z(1/2) = 0."""
+    expected = EULER_GAMMA * NormalDist().inv_cdf(1.0 - 1.0 / (2.0 * math.e))
+    assert expected_max_sharpe(2, 1.0) == pytest.approx(expected)
+    assert expected_max_sharpe(2, 4.0) == pytest.approx(2.0 * expected)  # scales with the std
+
+
+def test_expected_max_sharpe_is_zero_for_a_single_trial_or_identical_trials():
+    assert expected_max_sharpe(1, 0.3) == 0.0
+    assert expected_max_sharpe(50, 0.0) == 0.0
+
+
+def test_expected_max_sharpe_is_close_to_a_simulated_maximum():
+    """The mean of the largest of N standard normal draws; the formula is an approximation."""
+    rng = np.random.default_rng(0)
+    simulated = rng.standard_normal((20_000, 100)).max(axis=1).mean()
+    assert expected_max_sharpe(100, 1.0) == pytest.approx(simulated, abs=0.03)
+
+
+def test_dsr_reproduces_the_numerical_example_of_the_paper():
+    """The numerical example of Bailey & López de Prado (2014).
+
+    Annualized Sharpe 2.5 on 1250 daily observations (250 a year), best of 100 trials whose
+    annualized Sharpe ratios have variance 1/2, skewness -3 and kurtosis 10. The paper reports
+    a non-annualized expected maximum of 0.1132 and DSR = 0.9004.
+    """
+    result = deflated_sharpe_ratio(
+        2.5,
+        n_trials=100,
+        sharpe_variance=0.5,
+        skew=-3.0,
+        kurtosis=10.0,
+        n_obs=1250,
+        periods_per_year=250,
+    )
+    assert result.expected_max_sharpe / math.sqrt(250) == pytest.approx(0.1132, abs=5e-5)
+    assert result.dsr == pytest.approx(0.9004, abs=5e-5)
+
+
+def test_dsr_with_a_single_trial_is_the_psr_against_zero():
+    result = deflated_sharpe_ratio(
+        0.8, n_trials=1, sharpe_variance=0.0, skew=-0.5, kurtosis=5.0, n_obs=2000
+    )
+    assert result.expected_max_sharpe == 0.0
+    assert result.dsr == probabilistic_sharpe_ratio(0.8, 0.0, 2000, skew=-0.5, kurtosis=5.0)
+
+
+def test_dsr_is_one_half_when_the_sharpe_is_the_expected_maximum():
+    threshold = expected_max_sharpe(40, 0.09)
+    result = deflated_sharpe_ratio(
+        threshold, n_trials=40, sharpe_variance=0.09, skew=0.0, kurtosis=3.0, n_obs=3000
+    )
+    assert result.dsr == 0.5
+
+
+def test_dsr_falls_with_more_trials_and_with_more_dispersion_across_trials():
+    def dsr(n_trials: float, variance: float) -> float:
+        return deflated_sharpe_ratio(
+            1.0, n_trials=n_trials, sharpe_variance=variance, skew=0.0, kurtosis=3.0, n_obs=2500
+        ).dsr
+
+    assert dsr(100, 0.04) < dsr(10, 0.04) < dsr(1, 0.04)
+    assert dsr(10, 0.16) < dsr(10, 0.04)
+
+
+def test_dsr_gives_the_same_answer_for_annualized_and_per_period_inputs():
+    """Annualizing multiplies the Sharpe by sqrt(252) and its variance across trials by 252."""
+    common = {"n_trials": 30, "skew": -0.4, "kurtosis": 7.0, "n_obs": 4000}
+    annualized = deflated_sharpe_ratio(0.9, sharpe_variance=0.05, periods_per_year=252, **common)
+    per_period = deflated_sharpe_ratio(
+        0.9 / math.sqrt(252), sharpe_variance=0.05 / 252, periods_per_year=1, **common
+    )
+    assert annualized.dsr == pytest.approx(per_period.dsr)
+    assert annualized.expected_max_sharpe == pytest.approx(
+        per_period.expected_max_sharpe * math.sqrt(252)
+    )
+    # Mixing the two (an annualized Sharpe read as a per-period one) is a different number.
+    mixed = deflated_sharpe_ratio(0.9, sharpe_variance=0.05, periods_per_year=1, **common)
+    assert abs(mixed.dsr - annualized.dsr) > 0.01
+
+
+def test_dsr_rejects_invalid_inputs():
+    valid = {
+        "sharpe": 1.0,
+        "n_trials": 10,
+        "sharpe_variance": 0.1,
+        "skew": 0.0,
+        "kurtosis": 3.0,
+        "n_obs": 500,
+    }
+    for bad in (
+        {"n_trials": 0},
+        {"sharpe_variance": -0.1},
+        {"n_obs": 1},
+        {"periods_per_year": 0},
+        {"kurtosis": 0.5},  # below 1, impossible for any distribution
+        {"sharpe": float("nan")},
+    ):
+        with pytest.raises(ValueError):
+            deflated_sharpe_ratio(**{**valid, **bad})
+    # Skewness 3 needs a kurtosis of at least 10; with 3 the estimator variance turns negative.
+    with pytest.raises(ValueError):
+        probabilistic_sharpe_ratio(30.0, 0.0, n_obs=500, skew=3.0, kurtosis=3.0)
+
+
+def test_return_moments_use_plain_kurtosis_not_excess():
+    """Two-point +-1 returns have skewness 0 and kurtosis 1; pandas `.kurt()` reports excess."""
+    skew, kurtosis = return_moments(pd.Series([1.0, -1.0] * 50))
+    assert (skew, kurtosis) == pytest.approx((0.0, 1.0))
+
+    values = pd.Series([0.0, 0.0, 0.0, 4.0])  # mean 1, m2 = 3, m3 = 6, m4 = 21
+    skew, kurtosis = return_moments(values)
+    assert skew == pytest.approx(6.0 / 3.0**1.5)
+    assert kurtosis == pytest.approx(21.0 / 9.0)
+
+    normal = pd.Series(np.random.default_rng(0).standard_normal(200_000))
+    assert return_moments(normal) == pytest.approx((0.0, 3.0), abs=0.05)
+    with pytest.raises(ValueError):
+        return_moments(pd.Series([0.01] * 30))
+
+
+def test_effective_trials_goes_from_one_to_n_with_the_correlation():
+    rng = np.random.default_rng(1)
+    base = rng.standard_normal(5000)
+    copies = pd.DataFrame({k: base * (k + 1) for k in range(6)})  # correlation 1
+    independent = pd.DataFrame(rng.standard_normal((5000, 6)))
+
+    assert effective_trials(copies) == pytest.approx(1.0)
+    assert effective_trials(independent) == pytest.approx(6.0, abs=0.2)
+    # Two columns with correlation 0.5: rho + (1 - rho) * N = 0.5 + 0.5 * 2.
+    z = rng.standard_normal(200_000)
+    pair = pd.DataFrame({"a": z, "b": 0.5 * z + math.sqrt(0.75) * rng.standard_normal(200_000)})
+    assert effective_trials(pair) == pytest.approx(1.5, abs=0.01)
+    assert effective_trials(copies[[0]]) == 1.0
