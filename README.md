@@ -14,6 +14,7 @@ rigor: no look-ahead bias, transaction costs included, and out-of-sample validat
 - Tests whether the Sharpe difference between two strategies is significant (paired stationary bootstrap and Ledoit-Wolf HAC test), with the Holm correction when several strategies are compared, and whether a single Sharpe ratio differs from zero (one-sample stationary bootstrap)
 - Runs a strategy over a grid of parameter values and plots the Sharpe heatmap, to tell a plateau from an isolated spike
 - Computes the Deflated Sharpe Ratio, which corrects the best Sharpe ratio for the number of configurations tried
+- Walk-forward validation: each year, trades the configuration that was best on past data, with the switches paid through the engine
 
 ## Strategies
 | Strategy | Status |
@@ -204,6 +205,46 @@ strategy families.
 
 Full analysis in [notebooks/04_robustness.ipynb](notebooks/04_robustness.ipynb).
 
+### Walk-forward validation: choosing the parameters in real time
+The grids above are in-sample. Here the parameters are chosen each year from past data only: at
+the last close of every year, the configuration of the grid with the best Sharpe ratio so far
+(expanding window from 2006-08-01, at least five years) is selected and traded the following
+year. A fourth "researcher" walk-forward chooses among all 65 sector configurations at once. The
+selected weights go through the engine once, so changing configuration pays its turnover. The
+design was fixed before running it. Out of sample: 2012-01-03 to 2026-10-30.
+
+![Equity and drawdown of the walk-forward portfolios vs. equal weight](docs/img/walk_forward.png)
+
+| Out of sample, 2012-2026 | Momentum | Mean reversion | Trend following | All 65 configurations | Equal weight |
+|---|---|---|---|---|---|
+| Sharpe, walk-forward | 0.75 | 0.81 | 0.84 | 0.84 | 0.89 |
+| Sharpe, parameters fixed in advance | 0.88 | 0.83 | 0.93 | | |
+| CAGR, walk-forward | 11.5% | 13.2% | 7.8% | 7.8% | 13.5% |
+| Max drawdown, walk-forward | −35.8% | −34.9% | −15.0% | −15.0% | −36.7% |
+| Changes of configuration in 15 years | 8 | 2 | 3 | 3 | |
+| Percentile of the chosen configuration in its grid the next year | 0.52 | 0.59 | 0.51 | 0.49 | |
+| Sharpe difference vs. equal weight | −0.14 | −0.08 | −0.05 | −0.05 | |
+| Bootstrap p-value (raw / Holm) | 0.16 / 0.93 | 0.50 / 1.00 | 0.73 / 1.00 | 0.73 / 1.00 | |
+
+**Choosing parameters on past performance earned less than fixing them in advance, and less
+than equal weight.** No difference is statistically significant (Holm across seven comparisons),
+so the data cannot show that selection hurt, only that it did not help. The reason is in the
+sixth row: the configuration with the best track record is, the following year, an average
+member of its own grid (0.5 is the middle), and beats the median one in 7 or 8 years out of 15.
+Past Sharpe ratio says nothing usable about which parameters will do better next.
+
+The researcher who can choose anything picks a trend-following window every year, because it
+ranks first on Sharpe ratio, and gives up 5.7 points of return a year for a smaller drawdown.
+Switching between configurations costs at most 0.02% a year. A secondary variant with a rolling
+five-year window, declared in advance, gives the same picture (0.59 to 0.85, all below equal
+weight). With these eight runs the project has tried 106 configurations.
+
+The out-of-sample period is one long bull market without a 2008, and the candidate grids were
+designed after seeing the full sample: the walk-forward is honest about the choice among them,
+not about the choice of the menu.
+
+Full analysis in [notebooks/05_walk_forward.ipynb](notebooks/05_walk_forward.ipynb).
+
 ## Tests
 ```bash
 pytest
@@ -223,6 +264,7 @@ src/backtester/
 ├── metrics.py       # performance and risk metrics
 ├── significance.py  # bootstrap and Ledoit-Wolf tests, Holm correction, Deflated Sharpe Ratio
 ├── sensitivity.py   # one backtest per combination of a parameter grid
+├── walk_forward.py  # yearly selection on past data, traded out of sample
 └── report.py        # plots, Sharpe heatmaps and comparisons
 tests/               # pytest, no network
 examples/            # runnable scripts

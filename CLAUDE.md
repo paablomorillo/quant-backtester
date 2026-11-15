@@ -24,6 +24,7 @@ Sharpe caused by a methodological error.
 - `src/backtester/metrics.py`: metrics on simple daily returns (252 days/year)
 - `src/backtester/significance.py`: Sharpe tests (bootstrap, Ledoit-Wolf, Holm) and the Deflated Sharpe Ratio
 - `src/backtester/sensitivity.py`: `run_grid` runs one backtest per parameter combination
+- `src/backtester/walk_forward.py`: `WalkForward` picks the best past configuration each year
 - `src/backtester/report.py`: plots, Sharpe heatmaps and comparison tables
 - `docs/ROADMAP.md`: project phases; tick the boxes as each item is finished
 

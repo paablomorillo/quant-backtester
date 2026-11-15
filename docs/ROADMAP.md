@@ -25,7 +25,8 @@ Each phase ends with: tests green, CI green, README updated and a commit/tag.
 - [ ] Volatility targeting as a layer on top of any strategy
 
 ## Phase 3 — Statistical rigor (what sets the project apart)
-- [ ] Walk-forward validation: optimize on a training window, evaluate out of sample
+- [x] Walk-forward validation: optimize on a training window, evaluate out of sample (`walk_forward.py`)
+- [x] Notebook `05_walk_forward.ipynb`: yearly selection within each sector grid and across all of them, against the pre-fixed parameters and equal weight
 - [x] Block bootstrap for Sharpe confidence intervals (paired stationary bootstrap for Sharpe differences, cross-checked with Ledoit-Wolf, and a one-sample version against zero, in `significance.py`)
 - [x] Deflated Sharpe Ratio (Bailey & López de Prado, 2014) to correct for the number of trials, in `significance.py`
 - [x] Parameter sensitivity analysis: Sharpe grids for the four strategies (`sensitivity.py`, heatmaps in `report.py`)
