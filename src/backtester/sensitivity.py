@@ -55,6 +55,8 @@ def run_grid(
     """
     if not grid or any(len(values) == 0 for values in grid.values()):
         raise ValueError("the grid needs at least one parameter and one value for each")
+    if any(len(set(values)) != len(values) for values in grid.values()):
+        raise ValueError("the values of a parameter must not be repeated")
 
     names = list(grid)
     cells = list(product(*grid.values()))
@@ -97,10 +99,13 @@ def default_in_context(table: pd.Series, default: Hashable) -> pd.Series:
     along a single parameter: up to two per parameter.
 
     A plateau shows as a default close to the mean of its neighbours and to the grid median.
-    A spike shows as a default far above both. Cells without a Sharpe ratio are ignored.
+    A spike shows as a default far above both. Cells without a Sharpe ratio are ignored, and
+    a default without one is rejected.
     """
     if default not in table.index:
         raise ValueError(f"{default} is not a cell of the grid")
+    if pd.isna(table.loc[default]):
+        raise ValueError(f"the cell {default} has no Sharpe ratio, so it cannot be ranked")
     cell = default if isinstance(default, tuple) else (default,)
     valid = table.dropna()
     neighbours = table.loc[_neighbours(table.index, cell)].dropna()

@@ -545,6 +545,16 @@ def test_expected_max_sharpe_is_zero_for_a_single_trial_or_identical_trials():
     assert expected_max_sharpe(50, 0.0) == 0.0
 
 
+def test_expected_max_sharpe_is_floored_at_zero_for_barely_more_than_one_trial():
+    """Below about 1.5 trials the approximation is negative; the DSR is then the plain PSR."""
+    assert expected_max_sharpe(1.2, 1.0) == 0.0
+    assert expected_max_sharpe(2.0, 1.0) > 0.0
+    barely = deflated_sharpe_ratio(
+        0.8, n_trials=1.2, sharpe_variance=0.1, skew=0.0, kurtosis=3.0, n_obs=2000
+    )
+    assert barely.dsr == probabilistic_sharpe_ratio(0.8, 0.0, 2000)
+
+
 def test_expected_max_sharpe_is_close_to_a_simulated_maximum():
     """The mean of the largest of N standard normal draws; the formula is an approximation."""
     rng = np.random.default_rng(0)

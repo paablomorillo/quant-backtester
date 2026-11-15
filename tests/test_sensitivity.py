@@ -134,3 +134,24 @@ def test_default_in_context_rejects_a_default_outside_the_grid():
     table = pd.Series([0.2, 0.5], index=pd.Index([50, 100], name="window"))
     with pytest.raises(ValueError):
         default_in_context(table, 75)
+
+
+def test_default_in_context_rejects_a_default_without_a_sharpe():
+    """A default that never trades must not be ranked (it would come out as the best cell)."""
+    table = pd.Series([0.2, np.nan, 0.5], index=pd.Index([50, 100, 150], name="window"))
+    with pytest.raises(ValueError):
+        default_in_context(table, 100)
+
+
+def test_repeated_values_in_a_grid_are_rejected(prices):
+    with pytest.raises(ValueError):
+        run_grid(prices, TrendFollowing, {"window": [20, 50, 20]})
+
+
+def test_the_automatic_start_ignores_a_cell_that_never_trades(prices):
+    """A window longer than the sample never invests; the other cell still sets the start."""
+    grid = run_grid(prices, TrendFollowing, {"window": [50, 1000]})
+
+    assert grid.start == run_backtest(prices, TrendFollowing(window=50)).first_active
+    assert np.isnan(grid.sharpe[1000])
+    assert grid.sharpe.notna()[50]

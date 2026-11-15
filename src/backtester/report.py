@@ -56,9 +56,11 @@ def plot_sharpe_heatmap(
     """
     if default is not None and (default[0] not in table.index or default[1] not in table.columns):
         raise ValueError(f"{default} is not a cell of the table")
+    values = table.to_numpy(dtype=float)
+    if np.isnan(values).all():
+        raise ValueError("the table has no values to plot")
     if ax is None:
         _, ax = plt.subplots(figsize=(1.1 * table.shape[1] + 2, 0.6 * table.shape[0] + 1.5))
-    values = table.to_numpy(dtype=float)
     if limit is None:
         limit = float(np.nanmax(np.abs(values)))
     ax.imshow(values, cmap="RdBu", vmin=-limit, vmax=limit, aspect="auto")

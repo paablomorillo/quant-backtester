@@ -71,6 +71,21 @@ def test_heatmap_rejects_a_default_outside_the_table():
     plt.close("all")
 
 
+def test_heatmap_rejects_a_table_without_any_value():
+    with pytest.raises(ValueError):
+        plot_sharpe_heatmap(_sharpe_table() * np.nan)
+    plt.close("all")
+
+
+def test_heatmap_writes_in_white_on_the_darkest_cells():
+    ax = plot_sharpe_heatmap(_sharpe_table())  # limit 0.55, so white above 0.33 in size
+    colors = {text.get_text(): text.get_color() for text in ax.texts}
+
+    assert colors["0.55"] == colors["0.40"] == "white"
+    assert colors["0.10"] == colors["-0.30"] == colors["n/a"] == "black"
+    plt.close(ax.figure)
+
+
 def test_plot_result_shows_benchmark_drawdown_with_custom_labels():
     mom, bench = _results()
 

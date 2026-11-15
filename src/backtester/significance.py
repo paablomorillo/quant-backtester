@@ -542,8 +542,9 @@ def expected_max_sharpe(n_trials: float, sharpe_variance: float) -> float:
     threshold, or of per-period ones to get a per-period threshold.
 
     With a single trial nothing was selected and the threshold is 0. The approximation is meant
-    for large N and turns negative for N below about 1.5, so it is floored at 0. `n_trials` may
-    be fractional (see `effective_trials`).
+    for large N and turns negative for N below about 1.5, so it is floored at 0: with so few
+    trials the Deflated Sharpe Ratio is not deflated at all. `n_trials` may be fractional (see
+    `effective_trials`).
     """
     if not n_trials >= 1:  # also rejects NaN
         raise ValueError(f"n_trials must be at least 1, got {n_trials}")
