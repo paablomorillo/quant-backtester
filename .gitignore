@@ -9,7 +9,7 @@ venv/
 htmlcov/
 .ipynb_checkpoints/
 
-# Datos descargados y salidas generadas
+# Downloaded data and generated outputs
 data/*.parquet
 reports/
 

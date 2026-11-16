@@ -26,7 +26,7 @@ Sharpe caused by a methodological error.
 - `src/backtester/sensitivity.py`: `run_grid` runs one backtest per parameter combination
 - `src/backtester/walk_forward.py`: `WalkForward` picks the best past configuration each year
 - `src/backtester/report.py`: plots, Sharpe heatmaps and comparison tables
-- `docs/ROADMAP.md`: project phases; tick the boxes as each item is finished
+- `docs/ROADMAP.md`: the phases completed in v1.0 and the future work left out
 
 ## Non-negotiable rules
 1. **No look-ahead.** A strategy at row t only uses data up to the close of t. The lag to t+1
